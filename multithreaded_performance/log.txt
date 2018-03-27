@@ -1,0 +1,105 @@
+
+Name: Masataka Mori
+
+Laboratory - Multithreaded performance
+
+
+================================================================================
+1. Check verison of sort command
+
+   >> sort --version
+   , which showed
+     sort (GNU coreutils) 8.29
+
+   Also to check path,
+   >> which sort
+   , which showed
+     /usr/local/cs/bin/sort
+
+    so it's good
+================================================================================
+2. Generate a file containing 10,000,000 random single-precision
+   floating point numbers, using od command
+
+   From TA's slide,
+   	od -An -t fF -N size < /dev/urandom
+
+   >> man od
+
+      od - dump files in octal and other formats
+      	 -A: output format for file offsets;
+	     RADIX is one of [doxn], for Decimal, Octal, Hex  or None
+	     -n : None
+
+	 -t: select output format or formats
+	     fF : same as -t fF, select floats
+
+	 -N: limit dump to BYTES input bytes
+
+   We need to make 10,000,000 floating point, and -N take as Bytes.
+   Since single-precision floating point is 4 bytes,
+   4*10,000,000 = 40000000 is size we want to make.
+
+   Also, we don't want any white spaces, by remembering the
+   assignment2 material, pipe to
+   tr -s [:blank:] '\n'
+
+   To delete the all empty line
+   sed '/^$/d'
+
+   , so
+   od -An -t fF -N 40000000 < /dev/urandom | tr -s [:blank:] '\n'
+      | sed '/^$/d' > rfloat.txt
+
+================================================================================
+3. Test each cases
+
+   A. Base case
+
+      >> time -p sort -g rfloat.txt > /dev/null
+
+      real 20.87
+      user 114.31
+      sys 0.45
+      
+   B. Multithreads cases
+
+   B.1: 1 thread
+
+	>> time -p sort -g --parallel=1 rfloat.txt > /dev/null
+
+	real 102.90
+	user 102.70
+	sys 0.18
+	
+   B.2: 2 threads
+
+   	>> time -p sort -g --parallel=2 rfloat.txt > /dev/null
+
+	real 56.77
+	user 108.01
+	sys 0.30
+
+   B.3: 4 threads
+   	>> time -p sort -g --parallel=4 rfloat.txt > /dev/null
+
+	real 33.04
+	user 112.17
+	sys 0.37
+
+   B.4: 8 threads
+   	>> time -p sort -g --parallel=8 rfloat.txt > /dev/null
+
+	real 21.04
+	user 114.55
+	sys 0.47
+
+
+We can eailisy see that the real time is decreasing as
+the number of threads is increasing. It's because
+we are doing the independent tasks in parallel.
+However, also notice that user time is increasing
+as the number of threads increases, it also happened in our hw assignment.
+User time is the time spend in CPU while executing on user mode, so
+as the number of threads increase, CPU must spend time on creating
+the threads, so it increased the user time.

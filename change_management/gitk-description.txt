@@ -1,0 +1,22 @@
+Name: Masataka Mori
+
+Reference: http://lostechies.com/joshuaflanagan/2010/09/03/use-gitk-to-understand-git/
+ from TA's slide.
+
+
+1. Upper left pane
+   Series of commit to the repository, in the form of tree.
+
+2. Upper middle pane
+   Shows the person's name and email who commit which is in the same row in the (1).
+
+3. Upper right pane
+   Shows the date of commit which is the same row in the (1).
+
+4. Lower left pane
+   Shows the Diff between old version and new version.
+   We can also see either old version or new version only by switching the
+   diagonal check box.
+
+5. Lower right pane
+    Shows list of files impacted by the selected commit

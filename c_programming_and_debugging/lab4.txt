@@ -1,0 +1,476 @@
+Name: Masataka Mori
+
+Laboratory: Debugging a C program
+
+===========================================================================
+1. Download the old version of coreutils
+
+   >> wget https://web.cs.ucla.edu/classes/winter18/cs35L/
+                      assign/coreutils-with-bug.tar.gz
+
+===========================================================================
+2. Untar the file
+
+   using the same command as the last lab
+   >> tar -xzvf coreutils-with-bug.tar.gz
+
+===========================================================================
+3. Create the directory to install the above coreutils
+
+   >> mkdir coreutils_bug_install
+
+===========================================================================
+4. Set configure
+
+   using the similar method as the last lab
+
+   >> cd coreutils-with-bug/
+   >> ./configure --prefix=/u/cs/ugrad/masataka/Documents/
+                          cs35l/lab4/coreutils_bug_install
+
+===========================================================================
+5. Make
+
+   under the coreutils-with-bug directory
+   >> make
+   , and it shows the error
+   utimens.h:2:5: error: conflicting types for 'futimens'
+    int futimens (int, char const *, struct timespec const [2]);
+        ^~~~~~~~
+   In file included from utimecmp.h:25:0,
+                    from utimecmp.c:25:
+   /usr/include/sys/stat.h:373:12: note: previous declaration of
+   'futimens' was here
+        extern int futimens (int __fd, const struct timespec __times[2])
+		                                      __THROW;
+                   ^~~~~~~~
+   make[3]: *** [Makefile:659: utimecmp.o] Error 1
+   make[3]: Leaving directory '/w/home.05/cs/ugrad/masataka/
+   Documents/cs35l/lab4/coreutils-with-bug/lib'
+   make[2]: *** [Makefile:414: all] Error 2
+   make[2]: Leaving directory '/w/home.05/cs/ugrad/masataka/
+   Documents/cs35l/lab4/coreutils-with-bug/lib'
+   make[1]: *** [Makefile:419: all-recursive] Error 1
+   make[1]: Leaving directory '/w/home.05/cs/ugrad/masataka/
+   Documents/cs35l/lab4/coreutils-with-bug'
+   make: *** [Makefile:357: all] Error 2
+
+===========================================================================
+6. Apply the patch to fix the error and bug
+
+   A. get the patch
+   	 Under the coreutils-with-bug directory
+	 >> touch patch
+	 >> emacs patch
+	 and copy past the following URL:
+	 https://web.cs.ucla.edu/classes/winter18/cs35L/assign/coreutils.diff
+
+   B. Apply the patch like the last lab
+
+   	  >> patch -p1 < patch
+	  , it shows:
+	  	can't find file to patch at input line 3
+		Perhaps you used the wrong -p or --strip option?
+		The text leading up to this was:
+		--------------------------
+		|--- lib/utimens.c	2005-11-02 04:16:12.000000000 -0800
+		|+++ lib/utimens.c	2010-01-26 12:20:13.292737899 -0800
+
+	  there are the same kind of output with above,
+	  we just need to type the same name as shown in the above each time.
+	  so in above case, we need to type
+	  >> lib/utimens.c Enter
+
+	  Or we could try
+	  >> patch -p0 < patch
+	  to avoid typing manually
+
+   C. Try make again.
+
+   	  >> make
+	  ,and it didn't show any error, so install
+	  >> make install
+
+   D. What was the problem when operate make, and how above patch fiexed??
+
+   	  The error we had in our first trial of make was because of
+	  coflicting types for 'futimes' as the error states:
+	   error: conflicting types for 'futimens'
+	    int futimens (int, char const *, struct timespec const [2]);
+	   In file included from utimecmp.h:25:0,
+                 from utimecmp.c:25:
+	   /usr/include/sys/stat.h:373:12: note: previous declaration of '
+	                                                 futimens' was here
+       extern int futimens (int __fd, const struct t
+	                                        imespec __times[2]) __THROW;
+	  In detail, it produced the error because we tried to use the
+	  function 'futimens' even though it was decleared in the
+	  /usr/include/sys/stat.h:373:12, which is POSIX command.
+	  We are not allowed to re-declear the POSIX command function as it is
+	  an own function in the file (in this case, in utimecmp.h).
+
+	  In the patch file, they are renaming the function name so that it
+	  won't be the same as POSIX command function.
+	  In this case, they changed from 'futimens' to 'coreutils_futimens'
+	  and applied this change in src/touch.c, utimens.c, and utimens.h.
+	  Also, tee function decleared in src/tee.c for coreutils also cannot
+	  be used with same reason as 'futimens', so they changed from
+	  'tee' to 'coreutils_tee'.
+	  Now, since the names are different, we didn't get the errors.
+===========================================================================
+7. Reporduce the bug
+
+   Under coreutils_bug_install directory
+   >> tmp=$(mktemp -d)
+   >> cd $tmp
+   >> touch -d '1918-11-11 11:00 GMT' wwi-armistice
+   >> touch now
+   after a few seconds
+   >> touch now1
+   >> TZ=UTC0 ~/Documents/cs35l/lab4/coreutils_bug_install/bin/ls -lt
+                                      --full-time wwi-armistice now now1
+   shows:
+     -rw-r--r-- 1 masataka csugrad 0 1918-11-11 11:00:00.000000000
+	                                              +0000 wwi-armistice
+	 -rw-r--r-- 1 masataka csugrad 0 2018-02-09 01:50:26.344564768
+	                                             +0000 now1
+     -rw-r--r-- 1 masataka csugrad 0 2018-02-09 01:50:18.153342151 +0000 now
+   so we succesfully reproduced the bug.
+   
+===========================================================================
+8. Find the bug reporduced above using gdb
+
+
+   Under the same temporary created directory above.
+   >> gdb  ~/Documents/cs35l/lab4/coreutils_bug_install/bin/ls
+
+   To run the same command as above,
+   >> r -lt --full-time wwi-armistice now now1
+   shows
+	Starting program: /w/home.05/cs/ugrad/masataka/Documents/cs35l/lab4/
+	   coreutils_bug_install/bin/ls -lt --full-time wwi-armistice now now1
+	-rw-r--r-- 1 masataka csugrad 0 1918-11-11
+	                                03:00:00.000000000 -0800 wwi-armistice
+    -rw-r--r-- 1 masataka csugrad 0 2018-02-08 17:50:26.344564768 -0800 now1
+	-rw-r--r-- 1 masataka csugrad 0 2018-02-08 17:50:18.153342151 -0800 now
+     [Inferior 1 (process 44529) exited normally]
+	 
+   Now we need to set some break point which function it calls.
+   Let's see which function is suspicious
+   >> info functions
+     static void sort_files(void);
+
+   this looks the function which sorts the files incorrectly like above.
+   to see detail
+   >> break sort_files
+
+   >> r -lt --full-time wwi-armistice now now1
+
+   and use s (step) to step of c code line by lin
+   >> s
+   which shows:
+   2954	{
+   (gdb) s
+   2962	  if (! setjmp (failed_strcoll))
+   (gdb) s
+   2964	      switch (sort_type)
+   (gdb) s
+   2969		  switch (time_type)
+   (gdb) s
+   2975		      func = sort_reverse ? rev_cmp_mtime : compare_mtime;
+   (gdb) s
+   3034	  qsort (files, files_index, sizeof *files, func);
+
+   It calls the function compare_mtime, which also seems to cause the
+   bug.
+   Let's set the break point to comare_mtime now
+   >> break compare_mtime
+
+   Run the program again
+   >>  r -lt --full-time wwi-armistice now now1
+   to go to the compare_mtime breakpoint
+   >> c
+   , which shows
+    2884	static int compare_mtime (V a, V b)
+	             { return cmp_mtime (a, b, xstrcoll); }
+
+   >> s
+   >> s
+   , which showed:
+   timespec_cmp (b=..., a=...) at ../lib/timespec.h:48
+   48	  int diff = a.tv_sec - b.tv_sec;
+
+   This seems comparing the time, so the function timespec_cmp must be
+   somewhat wrong.
+   To see the c code around them.
+   >> list
+   43	/* Return negative, zero, positive if A < B, A == B, A > B,
+   		   		  				  		   	  	  	 respectively.
+   44	   Assume the nanosecond components are in range, or close to it.
+																		*/
+   45	static inline int
+   46	timespec_cmp (struct timespec a, struct timespec b)
+   47	{
+   48	  int diff = a.tv_sec - b.tv_sec;
+   49	  return diff ? diff : a.tv_nsec - b.tv_nsec;
+   50	}
+   51	
+   52	# if ! HAVE_DECL_NANOSLEEP
+
+   Let's see what value the variable diff has.
+   >> info locals
+    diff = <optimized out>
+
+   to see the value of diff after the subtraction
+   >> s
+   >> info locals
+    diff = 8
+   so this functin return 11 this time.
+   Let's see more
+   >> c
+   >> s
+   >> s
+   Now we have
+    timespec_cmp (b=..., a=...) at ../lib/timespec.h:48
+    48	  int diff = a.tv_sec - b.tv_sec;
+   again.
+   Let's see the diff again.
+   >> info locals
+    diff = <optimized out>
+   >> s
+   >> info locals
+     diff = -1163000270
+   Now this time, this functino returns big negative value.
+
+   >> c
+   Continuing.
+   -rw-r--r-- 1 masataka csugrad 0 1918-11-11 03:00:00.000000000
+                                               -0800 wwi-armistice
+   -rw-r--r-- 1 masataka csugrad 0 2018-02-08 17:50:26.344564768 -0800 now1
+   -rw-r--r-- 1 masataka csugrad 0 2018-02-08 17:50:18.153342151 -0800 now
+   [Inferior 1 (process 44701) exited normally]
+
+   After the second function of timespec_cmp in timespec.h, the program
+   ended, so it natural to think it is comparing the time of files
+   two times since we have 3 files to compare.
+
+   At first call of timespec_cmp function it returns
+   8
+   Notice that it is the same as difference of time between now1 file and
+   now 2 file.
+   17:50:26 - 17:50:18 = 8
+   Then, how we got diff = -1163000270
+   Let's go back to gdb and see the operands for subraction.
+
+   Going back to the first call of timespec_cmp
+    (gdb) s
+    timespec_cmp (b=..., a=...) at ../lib/timespec.h:48
+    48	  int diff = a.tv_sec - b.tv_sec;
+
+   >> print  a.tv_sec
+    2 = <optimized out>
+   the value is optimized out since the compiler compile the c file with
+   some optimize level.
+   Let's disable optization and run again.
+
+   I opened the another lnxsrv, and download and untar the
+   coreutils-with-bugs in new another directory lab4_test.
+   Under the lab4_test/coreutils_with-bugs.
+   Apply the first patch like we did previously.
+   Go to the configure file.
+   >> emacs configure
+   and change all '-O2' to '-O0'
+   >> ./configure
+   check the Makefile
+   >> emacs Makefile
+   and -O2 was changed to -O0
+   >> make
+   we can confirm they are compiling with -O0 by seeing the outputs
+
+   Now, let's debug again by using this ls.
+   But first, I did the same step to create the same situation as before.
+   Make tmp directory and 3 files, and open gdb and set breakpoints.
+   To go to the same equation int diff = a.tv_sec - b.tv_sec; like above.
+
+   Under the temporary directory
+   >> gdb ~/Documents/cs35l/lab4_test/coreutils-with-bug/src/ls
+   shows:
+	Starting program: /w/home.05/cs/ugrad/masataka/Documents/cs35l/
+	    lab4_test/coreutils-with-bug/src/ls -lt
+		                --full-time wwi-armistice now now1
+		-rw-r--r-- 1 masataka csugrad 0 1918-11-11 03:00:00.000000000
+		                                        -0800 wwi-armistice
+		-rw-r--r-- 1 masataka csugrad 0 2018-02-08 18:18:50.971220055
+		                                        -0800 now1
+		-rw-r--r-- 1 masataka csugrad 0 2018-02-08 18:18:46.995153934
+		                                        -0800 now
+        [Inferior 1 (process 22973) exited normally]
+   >> break cmp_mtime
+   and run again
+   and using some steps, arrived here.
+       (gdb) s
+   	   timespec_cmp (a=..., b=...) at ../lib/timespec.h:48
+   	   48	  int diff = a.tv_sec - b.tv_sec;
+   	   (gdb) s
+   	   49	  return diff ? diff : a.tv_nsec - b.tv_nsec;
+
+   To see each variables
+   >> print diff
+     $1 = 4
+   >> print a.tv_nsec
+     $2 = 1518142730
+   >> print b.tb_nsec
+     $3 = 1518142726
+
+   By comparing with file's time 2018-02-08 18:18:50 and
+   2018-02-08 18:18:46, it's working correctly
+
+   Now, let's see the next call of timespec_cmp
+   >> c
+   and some s.
+   I noticed that there are a few more steps to arrive desirable equation
+   comparing the one with -O2. It's shows that -O2 clearly efficiently
+   skipped some line by optmizing the code.
+   Back to the debugging.
+   >> print diff
+    $4 = -1162998566
+   >> print a.tv_nsec
+    $5 = 971220055
+   >> print b.tv_nsec
+    $6 = 0
+
+   Notice that even though
+   a.tv_nsec > b.tv_nsec
+   the equation  a.tv_nsec - b.tv_nsec gave us
+   -1162998566
+   It means that we got postive overflow!!!!!!!!
+   So that's the problem of bug!!!!!
+
+   Therfore, the c code line causing the bug is
+   in lib/timespec.h:48
+   int diff = a.tv_sec - b.tv_sec;
+   and at line 49
+   return diff ? diff : a.tv_nsec - b.tv_nsec;
+
+   Now, let's fix it!!!!!
+
+===========================================================================
+9. Fix the bug!!!
+
+   Going back to my privious directory, which is
+   ~/Documents/cs35l/lab4, which has compiled with -O2
+
+   Going to coreutils-with-bug/lib
+   and found the file timespec.h.
+   Let's modify around the line 48 so that it treats
+   overflows properly.
+
+   I modified the code so that it behave exactly same logic as
+   the comment above the function says.
+   If A < B, return negative
+   If A = B, return zero
+   If A > B, return positive
+   
+   in C code as follows:
+   	  if (a.tv_sec < b.tv_sec)    return -1;
+   	  if (a.tv_sec > b.tv_sec) return 1;
+   	  return 0;
+
+===========================================================================
+10. Create the patch file!!
+
+	Use diff command.
+	>> man diff
+	  -u, -U NUM, --unified[=NUM]
+              output NUM (default 3) lines of unified context
+
+
+	Since I modified the file under the lab4/coreutils-with-bug/lib,
+	let's use the file lab4_test/coreutils-with-bug/lib to produce
+	diff file.
+	under the lab4 directory
+	>> diff -u coreutils-with-bug/lib/timespec.h
+						../lab4_test/coreutils-with-bug/lib/timespec.h
+						      > lab4.diff
+
+	By looking at the lab4.diff, we can notice that path is very specific:
+	coreutils-with-bug/lib/timespec.h and
+	../lab4_test/coreutils-with-bug/lib/timespec.h
+	change both to
+	lib/timespec.h
+
+===========================================================================
+11. Test under the tmp directory.
+
+   A. Apply the patch lab4.diff
+   	  Under the directory lab4_test/coreutils-with-bug
+
+	  >> patch -p0 < ~/Documents/cs35l/lab4/lab4.diff
+	  	   patching file lib/timespec.h
+
+	  By checking the file it was succesfully patched.
+
+   B. Test under the tmp directory.
+
+   	   First we need to compile new version.
+	   >> make
+
+     
+	   >> tmp=$(mktemp -d)
+   	   >> cd $tmp
+   	   >> touch -d '1918-11-11 11:00 GMT' wwi-armistice
+   	   >> touch now
+   	   after a few seconds
+   	   >> touch now1
+   	   >> TZ=UTC0 ~/Documents/cs35l/lab4_test/coreutils-with-bug/src/ls
+	                  -lt --full-time wwi-armistice now now1
+	   which showed:
+	   		 -rw-r--r-- 1 masataka csugrad 0 2018-02-09
+			                                03:24:23.915765786 +0000 now1
+             -rw-r--r-- 1 masataka csugrad 0 2018-02-09
+			                                03:24:19.446644333 +0000 now
+             -rw-r--r-- 1 masataka csugrad 0 1918-11-11
+			                          11:00:00.000000000 +0000 wwi-armistice
+      
+     Bug is fixed!!!!!!!!!!!
+
+	 To delete the temp folder
+	 >> rm -fr $tmp
+
+===========================================================================
+12. Reproduce the problem with in your home directory on the SEASnet
+    Linux servers.
+	When running the above test case, use the already-installed touch
+	and ls utilities instead of the old version of coreutils.
+	How well does SEASnet do?
+
+	Under the home direcotry
+	>> touch -d '1918-11-11 11:00 GMT' wwi-armistice
+   	>> touch now
+   	after a few seconds
+   	>> touch now1
+   	>> TZ=UTC0 ls -lt --full-time wwi-armistice now now1
+	which showed:
+		  -rw-r--r-- 1 masataka csugrad 0 2054-12-17
+		                             17:28:16.000000000 +0000 wwi-armistice
+          -rw-r--r-- 1 masataka csugrad 0 2018-02-09
+		                             03:32:22.827774000 +0000 now1
+          -rw-r--r-- 1 masataka csugrad 0 2018-02-09
+		                             03:32:16.730678000 +0000 now
+
+    It is clear that SEASnet cannot handle the very old file proper because
+	it is stating as future year 2054-12-17 in stead of 1918-11-11 11:00.
+
+	I think this is relating to the famous Year 2038 problem.
+	The computer use Unix time system to calculate the time.
+	The way to calculate is:
+	the number of seconds past from 1970-1-1 00:00:00 - the number of leap
+	seconds occured from that time
+	The Year 2038 problem is that in the system which use the singed 32 bit
+	interger to represent Unix time,
+	and because of that it cannot represent the time after 2038-1-19 03:14:08.
+	In our system, as we saw in the test above, it showed the time
+	2054-12-17, so I can say that SEASnet doesn't use the signed 32 bit integer
+	to represent the Unix time.
+
+	

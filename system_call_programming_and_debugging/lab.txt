@@ -1,0 +1,337 @@
+
+NAME: Masataka Mori
+
+Laboratory: Buffered versus unbuffered I/O
+
+
+==============================================================================
+1. Create tr2b.c, which uses buffered I/O
+
+   A. Use buffered input
+
+      getchar(): get a byte from a stdin stream
+          int getchar(void)
+	  Return: the character read as an unsigned int
+	          EOF
+		  Error
+      Error Handling:
+      	    if (ferror(stdin))
+	       something..
+
+            int ferror(FILE *stream): test the error indicator for the given stream
+	    	stream: pointer to a FILE object that identifies the stream.
+		Return:
+			Nonzero value if error indicator associated with the stream was set
+			Zero value else
+
+   B. Use buffered output
+
+      putchar(): write a char(an unsigned char) specifed by
+      		 the argument char to stdout
+           
+	int putchar(int char)
+	   Return: the character written as an unsigned cast to an in
+	   	   EOF
+		   Error
+
+           Error handling:
+	   	 if (ferror(stdout))
+		    something
+
+   C. Write to stderr and exit
+      fprintf(stderr, "Message: %s", strerror(errno));
+      exit(1)
+
+      int fprintf(FILE *stream, const char *format, ...):
+      	  send formatted output to a stream
+
+	  stream: a pointer to a FILE object that identifies the stream.
+	  format: C string that contains the text to be written to the stream
+
+
+   D. Determine the lengh of C string
+
+      	size_t strlen(const char *str):
+	       get the length of the string str up to,
+	       but not including the terminating null character.
+
+	       Return: the length of string
+
+	       can store the int date type
+
+   E. Getting command line arguments
+
+      int main (int argc, char *argv[]):
+      	  argc: the number of argument
+	  argv[]:
+		argv[0]: the name of program itself
+		argv[1]: the pointer to the first commandline argument
+		*argv[n]: the last argument
+
+
+================================================================================
+2. Create tr2u.c, which uses unbuffered I/O
+
+   A. read() function
+
+      #include <unistd.h>
+      ssize_t read(int fildes, void *buf, size_t nbyte);
+       read() function shall attempt to read nbyte bytes from the file
+       associated with the open file descriptor, fildes, into the buffer pointed to by buf.
+
+       file descriptor: STDIN_FILENO, indicates stdin
+
+       Return:
+	Success: a non-negative integer indicating the number of bytes actually read
+	Error: return -1 and set errno to indicate the error
+
+   B. write() function
+
+      #include <unistd.h>
+      ssize_t write(int fildes, const void *buf, size_t nbyte);
+         write nbyte bytes from the buffer pointed to by buf to the file
+	 associated with the open file descriptor, fildes.
+
+	 file descriptr: STDOUT_FILENO, indicate stdout
+
+      Return:
+	Success: the number of bytes actually written to the file associated with fildes
+		 This number shall never be greater than nbyte
+
+        Error: -1 shall be returned and errno set to indicate the error.
+===============================================================================
+2.5. test both case
+
+     To test I made a file with a random characters, and run the following
+     bash script.
+
+     echo 'testing tr2u...'
+     ./tr2u $x $y < file.txt > output_tr2u
+     #./tr2u $x $y < file.txt
+
+     echo 'testing tr...'
+     tr $x $y < file.txt > output_tr
+     #tr $x $y < file.txt
+
+     diff -u output_tr2b output_tr
+     diff -u output_tr2u output_tr
+     diff -u output_tr2b output_tr2u
+     #remove the output file
+     rm output_*
+
+
+     Then,
+     >> ./test.h
+
+     it output:
+     	testing tr2b...
+	testing tr2u...
+	testing tr...
+
+     So test successed.
+================================================================================
+3. Use the strace command to compare the system calls issued by your tr2b and tr2u commands
+   (a) when copying one file to another
+   (b) when copying a file to your terminal
+   Use a file that contains at least 5,000,000 bytes.
+
+   A. Create a file containing at least 5,000,000 bytes.
+
+      To create a random test file that contains n bytes,
+      >> head --bytes=5000000  /dev/urandom > big_file.txt 
+
+      We can check the size with
+      >> ls -l big_file.txt
+
+      >> head --bytes=5000000  /dev/urandom > big_file.txt
+      >> ls -l big_file.txt
+      , which shows:
+      -rw-r--r-- 1 masataka csugrad 5000000 Feb 15 19:41 big_file.txt
+
+   A-1. Test with big file.
+
+     By using the same shell script except change the file name to big_file.txt.
+     The output was:
+     	 testing tr2b...
+	 testing tr2u...
+	 testing tr...
+	 Binary files output_tr2b and output_tr differ
+	 Binary files output_tr2b and output_tr2u differ
+
+	 so something wrong with tr2b.c
+	 By checking its output, it was ended only with 2 lines while
+	 it suppose to contain at least 5000000 characters.
+
+	 I realized that when I change the big_file.txt to all 'a' characters'
+	 (I created making c code, and printed to file).
+	 The reason I "guess" was when we use the
+	 >>head --bytes=5000000  /dev/urandom > big_file.txt
+	 it created some binary words.
+	 And in those words, probably EOF as binary was incuded, so when
+	 gethchar() read that, it terminated.
+	 But since read() don't quit with EOF, it only quit when character read was 0.
+	 Therefore, tr2b didn't work while tr2u worked correcly.
+
+	 Now, let's use the different ways to create 5000000 bytes file.
+	 I don't want binary words, so I just make it big_file to contain the
+	 alphabet, numbers, spaces, tabs, newline chracters.
+
+	 >> < /dev/urandom tr -dc "\t\n [:alnum:]" | head -c5000000 > big_file.txt
+(reference: https://linuxconfig.org/create-a-random-character-text-file-using-linux-shell)
+	 to check
+	 >> ls -l big_file.txt
+	 -rw-r--r-- 1 masataka csugrad 5000000 Feb 15 21:00 big_file.txt
+	 greate!
+
+	 Let's retest them.
+	 The output was follows:
+	     testing tr2b...
+	     testing tr2u...
+	     testing tr...
+
+	 Therefore, Success!!
+	 Let's use this file for following test too.
+
+   B. Strace
+      strace: trace system calls and signals
+      	 In  the  simplest case strace runs the specified command until it exits.
+      	 It intercepts and records the system calls which are called by a process
+      	 and the  signals  which  are received  by  a  process.
+      	 The  name of each system call, its arguments and its return
+      	 value are printed on standard error or to the file specified with the -o option.
+
+	 -c: Count time, calls, and errors for each system call and report a summary
+	     on program exit.
+	     On Linux, this attempts to show system time
+	     (CPU time spent running in the kernel) independent of wall clock time.
+      
+
+   C. Test
+   
+      part(a):
+        for this part I used following shell script:
+	#!/bin/bash
+	gcc -std=c99 -o tr2b tr2b.c
+	gcc -std=c99 -o tr2u tr2u.c
+	x='abc'
+	y='xyz'
+	strace -o strace_tr2b ./tr2b $x $y < big_file.txt > a.txt
+	strace -o strace_tr2u ./tr2u $x $y < big_file.txt > b.txt
+
+	To check how many syscall was exectued
+	>> cat strace_tr2b | wc -l
+	, which showed:
+	  1255
+	>> cat strace_tr2u | wc -l
+	, which showed:
+	  10000031
+
+      ==> it is clear that tr2u called a lot a lot more syscall than tr2b.
+
+      part(b):
+        for this part I used the same shell script as above but
+	excluding '> a.txt' and '> b.txt'
+	To check how many syscall was executed
+
+	>> cat strace_tr2b | wc -l
+	   77938
+	>> cat strace_tr2u | wc -l
+	   10000029
+	
+      ==> Here, we still got more syscall by using the tr2u.
+      	  However, notice that the syscall in tr2b increased a lot
+	  comparing with part (a).
+
+      To see the detail, I used -c instead of -o only for tr2b to
+      see the reason.
+
+      part(a):
+	tr2b:
+	% time     seconds  usecs/call     calls    errors syscall
+	------ ----------- ----------- --------- --------- ----------------
+	75.23    0.008536          14       611           write
+	23.13    0.002624           4       613           read
+	0.52    0.000059           7         9           mmap
+	0.28    0.000032           8         4           mprotect
+	0.19    0.000022           6         4           fstat
+	0.15    0.000017           4         4           brk
+	0.13    0.000015           8         2           open
+	0.11    0.000012          12         1           munmap
+	0.09    0.000010          10         1           execve
+	0.07    0.000008           4         2           close
+	0.07    0.000008           8         1         1 access
+	0.04    0.000004           4         1           arch_prctl
+	------ ----------- ----------- --------- --------- ----------------
+	100.00    0.011347                  1253         1 total
+
+      part(b):
+	tr2b:
+	
+	time     seconds  usecs/call     calls    errors syscall
+	------ ----------- ----------- --------- --------- ----------------
+	99.22    0.339033           4     77294           write
+	0.78    0.002658           4       613           read
+	0.00    0.000000           0         2           open
+	0.00    0.000000           0         2           close
+	0.00    0.000000           0         4           fstat
+	0.00    0.000000           0         9           mmap
+	0.00    0.000000           0         4           mprotect
+	0.00    0.000000           0         1           munmap
+	0.00    0.000000           0         4           brk
+	0.00    0.000000           0         1         1 access
+	0.00    0.000000           0         1           execve
+	0.00    0.000000           0         1           arch_prctl
+	------ ----------- ----------- --------- --------- ----------------
+	100.00    0.341691                 77936         1 total
+
+    ==> As we can see the program have to call more and more
+    	"write" syscall when it writes to terminal.
+================================================================================
+4. Use the time command to measure how much faster one program is,
+   compared to the other, when copying the same amount of data.
+
+   A. Time command
+
+     time - time a simple command
+       The time utility shall invoke the utility named by the utility operand with
+       arguments supplied as the argument operands and write a message to standard
+       error that lists timing statistics for the utility. The message shall include
+       the following information:
+        -The elapsed (real) time between invocation of utility and its termination.
+	-The User CPU time, equivalent to the sum of the tms_utime and tms_cutime
+	    fields returned by the times() function defined in the System Interfaces
+	    volume of POSIX.1-2008 for the process in which utility is executed
+        -The System CPU time, equivalent to the sum of the tms_stime and tms_cstime fields
+	returned by the times() function for the process in which utility is executed.
+
+   B. I used the following shell script to test
+
+      #!/bin/bash
+      gcc -std=c99 -o tr2b tr2b.c
+      gcc -std=c99 -o tr2u tr2u.c
+      x='abc'
+      y='abc'
+      time ./tr2b $x $y < big_file.txt > time_a.txt
+      time ./tr2u $x $y < big_file.txt > time_b.txt
+
+      Here, I used the big_file to see the significant difference in time.
+
+   C. Compare them
+ 
+      The output of shell script was following:
+      real	0m0.287s
+      user	0m0.208s
+      sys	0m0.007s
+
+      real	0m8.543s
+      user	0m1.193s
+      sys	0m7.279s
+
+      Note that time_a.txt time_b.txt contained the result of
+      ./tr2b $x $y < big_file.txt and ./tr2u $x $y < big_file.txt
+
+
+      ==> Therefore, using buffer I/O is much faster than unbuffered I/O one.
+      	  The reason is obvious when we look at the result of part 3.
+	  Unbuffered I/O one calls more syscall.
+============================================================================================

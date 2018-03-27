@@ -1,0 +1,217 @@
+
+Name: Masataka Mori
+
+===============================================================================
+Q1. Why did Brady's patch remove the line "case_long_iso_time_style:"?
+	Was it necessary to remove that line? Explain
+
+	Examine the ls.c file under the coreutils-7.6/src and 
+	coreutils_install/bin around the line we modifed(line 2014).
+	
+	In old version of ls.c, we can see that case_long_iso_time_style:
+	is used as label for the goto statement.
+	(refer: https://msdn.microsoft.com/en-us/library/2c002fdz.aspx)
+	In the for loop around line 2030, there is a statement,
+	goto case_long_iso_time_style;
+	, which cause instruction counter to jump to the label of
+	case_long_iso_time_style: and execute the folowing code.
+
+	In the updated version, the statement
+	goto case_long_iso_time_style;
+	was removed.
+	And by searching the word 'case_long_iso_time_style' in
+	the old version file, it wasn't used anywhere, so in updated version,
+	"case_long_iso_time_style:" become just useless label, 
+	and it won't affect the logic of code at all.
+
+	Therefore, it was NOT necessary to remove it.
+	However, since it was only used in the for loop in old version, and
+	it was removed, it is better to remove it for safety.
+	
+
+===============================================================================
+Q2. If your company adopts this patched version of Coreutils instead of
+	the default one, what else should you watch out for? Might this new
+	version of Coreutils introduce other problems with your application,
+	perhaps in countries where users don't speak English and 
+	don't understand English-format dates?
+
+	Let us examine the ls.c file under the coreutils-7.6/src and
+	see the newly added code in the for loop.
+	 long_time_format[i] = dcgettext (NULL, long_time_format[i], LC_TIME);
+
+	The function "dcgettext"
+	Accoring to
+	 https://www.gnu.org/software/libc/manual/html_node/
+				Translation-with-gettext.html
+	  dcgettext:
+		The dcgettext adds another argument to those which 
+		dgettext takes. This argument category specifies the 
+		last piece of information needed to localize the message
+		catalog. I.e., the domain name and the locale
+		category exactly specify which message 
+		catalog has to be used
+		
+	  in the same reference:
+	   dgettext:
+		The dgettext function acts just like the gettext function.
+		It only takes an additional first argument domainname 
+		which guides the selection of the message catalogs which
+		are searched for the translation. 
+		If the domainname parameter is the null pointer the
+		dgettext function is exactly equivalent to gettext since the 
+		default value for the domain name is used.
+
+    Therefore, seems like the third arument is the key to for printing
+	the proper language.
+	Let's do some test to check it.
+
+	The current locale is
+	>> locale
+	set as "en_US.UTF-8"
+	>> ./src/ls -l ../new_file
+	-rw-r--r-- 1 masataka csugrad 0 Feb  3 12:45 ../new_file
+
+	at this point LC_TIME is also set as "en_US.UTF-8", so it printed
+	the English "Feb" for month.
+
+	Let's try some other locale.
+	Since I can understand Japanese, the locale for Japanese language is
+	"ja_JP.UTF-8"
+	to set all locale as this
+	>> export LC_ALL='ja_JP.UTF-8'
+	to check
+	>> locale
+	,and it shows:
+		 LC_TIME="ja_JP.UTF-8"
+
+    Now, we try
+	>> ./src/ls -l ../new_file
+	, and showed
+	  -rw-r--r-- 1 masataka csugrad 0  2月  3 12:45 ../new_file
+
+    2月means Feburary, so it propery translate to other language too.
+
+	We can try some other languages by change locale.
+	There are some variaties of locale in the following URL:
+	https://docs.oracle.com/cd/E23824_01/html/E26033/glset.html.
+
+	When we set the LC_TIME="NULL",
+	>> ./src/ls -l ../new_file
+	, showed:
+	  -rw-r--r-- 1 masataka csugrad 0 Feb  3 12:45 ../new_file
+
+	So showed English version.
+
+==>Therefore, when LC_TIME was properly set to whetever the language
+   user can understand, it properly shows the translated version of month
+   which user can read.
+   However, if the language isn't supported and cannot set the
+   LC_TIME, it will print the English version of month. So the user cannot
+   understand it.
+   Also, if users LC_TIME was wrongly set as other type of language which user
+   doesn't know, the user cannot understand it too.
+   However, by looking at the list of locale, which I paste the URL above,
+   it supports many languages, so the new versoin of ls command won't
+   cause many problems regarding user's language.
+
+===============================================================================
+Q3. What happens when this script is invoked on an empty file like /dev/null,
+	and why?
+
+	>> python randline.py /dev/null
+	, which showed
+		Traceback (most recent call last):
+		    File "randline.py", line 70, in <module>
+			  main()
+			File "randline.py", line 64, in main
+			  sys.stdout.write(generator.chooseline())
+			File "randline.py", line 34, in chooseline
+			  return random.choice(self.lines)
+			File "/usr/local/cs/Python-2.7.14/lib/python2.7/
+						random.py",
+			                 line 277, in choice
+			  return seq[int(self.random() * len(seq))]  # raises
+			                    IndexError if seq is empty
+			IndexError: list index out of range
+
+	By looking at above, we can tell it is not result of exception handling
+	implemented in randline.py, so it is an error which wasn't handled
+	properly in the written python code.
+
+	Since I ran the program without option, it extract the 1 line from the
+	file as seted by default, so variable numline=1.
+	So it pass the first expeption handling since numline is valid type.
+	it also passes the next if statement numlines < 0 since numline=1
+	it also passes the next if statement len(args) != 1 since we have
+	correct number of arguments
+	Now, the variable input_file is set as empty file /dev/null and pass to
+	the randline function and initialized as instance generator.
+	In the next loop, since the range is specified as numlines, the next
+	line will be executed for sure. It calls the chooseline() with instance
+	generator, and it returns the value of random.choice(self.lines).
+	However, there is no line in self("/dev/null"), so it raised the
+	IndexError during processing the random.choice function.
+	In detail error was triggered in
+	   File "/usr/local/cs/Python-2.7.14/lib/python2.7/random.py",
+	   line 277, in choice
+       return seq[int(self.random() * len(seq))]
+	as output states.
+
+	It should change the statement
+	if numlines < 0: to
+	if numlines <= 0: to avoid this error.
+
+	Or we can put try and expection block when calling 
+	random.choice function.
+
+===============================================================================
+Q4. What happens when this script is invoked with Python 3 rather than
+	Python 2, and why? (You can run Python 3 on the SEASnet hosts by using
+	the command python3 instead of python.)
+
+	>> python3 randline.py file.txt
+	, which showed:
+	  File "randline.py", line 70
+      except IOError as (errno, strerror):
+                      ^	
+   	  SyntaxError: invalid syntax
+
+
+	 To know what IOError, I referenced:
+	 https://docs.python.org/2/library/exceptions.html
+	 , which states:
+	    exception IOError
+	     Raised when an I/O operation (such as a print statement,
+	     the built-in open() function or a method of a file object) fails
+	     For an I/O-related reason, e.g., 
+	      “file not found” or “disk full”.
+
+      This was document for python2.
+	  For python3, I referenced:
+	  https://docs.python.org/3/library/exceptions.html
+	  , which states:
+	  	Changed in version 3.3: EnvironmentError, IOError, WindowsError,
+		socket.error, select.error and mmap.error have been merged into
+		OSError, and the constructor may return a subclass.
+
+	  In the same reference, OS Error is defined as:
+	  	 This exception is raised when a system function returns a
+		 system-related error, 
+	    	 including I/O failures such as “file not found”
+		 or “disk full”
+		 (not for illegal argument types or other incidental errors).
+
+
+	 Therefore, we need to use OSError, instead of IOError to use python3.
+	 By refering the same URL, we can change to following:
+	  except OSError as err:
+	  		 parser.error("I/O error({0}): {1}".
+			 		format(err.errno, err.strerror))  
+	 >> python3 randline.py file.txt
+	 it worked correctly
+	 I also check if this modifiction still fine is python2,
+	 >> python randline.py file.txt
+	 it also worked correctly
+	 
+===============================================================================

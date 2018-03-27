@@ -1,0 +1,185 @@
+
+Name: Masataka Mori
+
+Homework: Encrypted sort revisited
+
+================================================================================
+1. Comparing with Performance difference between sfrob and sfrobu with time
+   command.
+
+   A. Create the file which can have the specified the lines.
+
+      For following experiment, I made following shell script:
+      #!/bin/bash
+      #specify the number of lines.
+      line=50;
+      #init
+      cat /dev/null > file.txt
+      for ((i=0; i < line; i++))
+      do
+	echo "~BO {_CIA FKPS NEM\n" >> file.txt
+      done
+
+      gcc -o sfrob sfrob.c
+      gcc -o sfrobu sfrobu.c
+      time ./sfrob < file.txt > a.txt
+      time ./sfrobu < file.txt > b.txt
+      rm a.txt b.txt
+
+      => you just need to change the number to put into the line variable.
+   
+
+   B. Test with different line of numbers.
+
+      # of line     | program     | real     | user     | sys      |
+      ---------------------------------------------------------------
+      50              sfrob         0.004s     0.001s     0.001s
+                      sfrobu        0.006s     0.000s     0.003s
+      ---------------------------------------------------------------
+      500             sfrob         0.005s     0.002s     0.001s
+                      sfrobu        0.030s     0.003s     0.025s
+      ---------------------------------------------------------------
+      5000            sfrob         0.025s     0.014s     0.006s
+                      sfrobu        0.625s     0.149s     0.472
+      ---------------------------------------------------------------
+      50000           sfrob         0.136s     0.107s     0.008s
+      		      sfrobu        2.052s     0.381s     1.659s
+      ---------------------------------------------------------------
+      500000          sfrob         2.264s     1.922s     0.159s
+      		      sfrobu        37.227s    8.428s     28.622s
+      ---------------------------------------------------------------
+      5000000         sfrob         Took too much time to run, so
+      		      sfrobu        I omit this case
+
+      As we can see the sfrobu takes much more time than sfrob.
+      Observe that both user and sys time increase as increasing the
+      number of lines. However, sys time grows faster than user time.
+      It is because sfrobu uses syscall, and it causes spending more
+      time on sys.
+
+   C. Estimate the number of comparisons as a
+      function of the number of input lines.
+
+      TA's slides specifies that it's only for sfrobu.
+      So, to count the number of comparison, I put the global counter
+      into my frobcmp function in sfrobu.c.
+      Alto to be more accurate, I did more variety of tests in here.
+      
+
+      # of line     | program     | # of comparison
+      ----------------------------------------------
+      10	      sfrobu       421
+      ---------------------------------------------
+      30              sfrobu       1759
+      ----------------------------------------------
+      50              sfrobu       3365
+      ----------------------------------------------
+      100	      sfrobu       7870
+      ---------------------------------------------
+      300             sfrobu       28906
+      ---------------------------------------------
+      500             sfrobu       52613 
+      ----------------------------------------------
+      1000            sfrobu       116707
+      ---------------------------------------------
+      3000            sfroub       404193
+      ---------------------------------------------
+      5000            sfrobu       714156
+      ----------------------------------------------
+      10000           sfrobu       1543294
+      ---------------------------------------------
+      30000           sfrobu       5191749
+      ----------------------------------------------
+      50000           sfrobu       9070592
+      ----------------------------------------------
+      100000	      sfrobu       19291166
+      ---------------------------------------------
+      300000          sfrobu       63175725
+      ---------------------------------------------
+      500000          sfrobu       109779428
+      ----------------------------------------------
+
+      => Let number of line = n, number of comparisoin = y
+      	 By using the logarithmic regression,
+      	 -->
+		y = -33,170,840.83 + 6,034,185.662log(n)
+
+		  where correlation coeffient r = 0.6661894693
+		        mean of n : 2,466.212074
+			mean of y : 13,958,796.27
+
+     (Using calculator from following website:
+        http://keisan.casio.com/exec/system/14059930226691)
+
+================================================================================
+2. Use the time command to compare the overall performance of sfrob, sfrobu,
+   sfrobs, sfrobu -f, and sfrobs -f.
+
+   For the test I run the following shell script:
+   #!/bin/bash
+   #specify the number of lines.
+   line=50;
+   #init
+   cat /dev/null > file.txt
+   for ((i=0; i < line; i++))
+   do
+	 echo "~BO {_CIA FKPS NEM\n" >> file.txt
+   done
+
+   gcc -o sfrob sfrob.c
+   gcc -o sfrobu sfrobu.c
+   echo "sfrob"
+   time ./sfrob < file.txt > a.txt
+   echo "sfrobu"
+   time ./sfrobu < file.txt > b.txt
+   echo "sforbs"
+   time cat file.txt | ./sfrobs > c.txt
+   echo "sfrobsu -f"
+   time ./sfrobu -f < file.txt > d.txt
+   echo "sfrobs -f"
+   time cat file.txt | ./sfrobs -f > e.txt 
+
+   rm a.txt b.txt c.txt d.txt e.txt f.txt
+
+
+
+	# of line     | program     | real     | user     | sys      |
+      ---------------------------------------------------------------
+      50              sfrob         0.004s     0.000s     0.002s
+                      sfrobu        0.006s     0.000s     0.003s
+		      sfrobs        0.031s     0.003s     0.005s
+		      sfrobu -f     0.007s     0.001s     0.003s
+		      sfrobs -f     0.008s     0.001s     0.007s
+      ---------------------------------------------------------------
+      500             sfrob         0.006s     0.003s     0.000s
+                      sfrobu        0.034s     0.003s     0.029s
+		      sfrobs        0.018s     0.003s     0.005s
+		      sfrobu -f     0.030s     0.003s     0.025s
+		      sfrobs -f     0.008s     0.001s     0.008s
+      ---------------------------------------------------------------
+      5000            sfrob         0.024s     0.013s     0.007s
+                      sfrobu        0.654s     0.147s     0.498s
+		      sfrobs	    0.018s     0.007s     0.005s
+		      sfrobu -f	    0.652s     0.156s     0.491s
+		      sfrobs -f	    0.022s    0.018s     0.003s
+      ---------------------------------------------------------------
+      50000           sfrob         0.214s     0.165s     0.015s
+      		      sfrobu        3.055s     0.625s     2.411s
+		      sfrobs	    0.073s     0.044s     0.021s
+		      sfrobu -f	    3.127s     0.649s     2.460s
+		      sfrobs -f	    0.169s     0.144s     0.015s
+      ---------------------------------------------------------------
+      500000          sfrob         2.364s     2.031s     0.143s
+      		      sfrobu        38.572s    8.553s     29.644s
+		      sfrobs	    0.619s     0.462s     0.057s
+		      sfrobu -f	    41.054s    9.629s     31.258s
+		      sfrobs -f	    1.617s     1.417s     0.079s
+
+   ==> It is clear that both sfrobu and sfrobu -f takes the most of
+       time comparing with ohter function because of the same reason
+       described as previous section.
+       Notice that sfrobs is the fastest program overall. By comparing with
+       the second fastest program sfrob, their main difference is coming
+       from user time, not sys time. It's because the sfrob calls much
+       more functions comparing to sfrobs. (sfrobs only to 2 tr commands,
+       1 sorts commands, while sfrob has many function I wrote in C file)

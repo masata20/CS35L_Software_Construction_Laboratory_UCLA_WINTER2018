@@ -1,0 +1,489 @@
+Name: Masataka Mori
+
+Laboratory: Managing a backported change
+
+===============================================================================
+1. Get a copy of the Diffutils repository, in Git format, from the file
+   ~eggert/src/gnu/diffutils on the SEASnet GNU/Linux servers,
+   or from its main Savannah repository.
+
+   In lnxsrv07, under the /u/cs/ugrad/masataka/Documents/cs35l/lab9
+
+   >> git clone ~eggert/src/gnu/diffutils
+
+
+===============================================================================
+2. Get a log of changes to Diffutils’ master branch using the “git log”
+   command, and put it into the file git-log.txt.
+
+   >> cd diffutils
+   >> git log > .gi./git-log.txt
+
+
+===============================================================================
+3. Generate a list of tags used for Diffutils using the “git tag” command,
+   and put it into the file git-tags.txt
+
+   >> git tag > ../git-tags.txt
+
+
+===============================================================================
+4. Find the commit entitled “maint: quote 'like this'
+   or "like this", not `like this'”,
+   and generate a patch for that commit,
+   putting it into the file quote-patch.txt.
+
+   >> emacs git-log.txt
+
+   Search: “maint: quote 'like this'"
+
+   Hash number:62ca21c8c1a5aa3488589dcb191a4ef04ae9ed4f
+
+   >> git format-patch -1 <hashnumber> --stdout > ../quote-patch.txt
+
+===============================================================================
+5. Check out version 3.0 of Diffutils from your repository.
+
+   >> git checkout v3.0 -b orignal_v3.0
+
+===============================================================================
+6. Use the patch command to apply quote-patch.txt to version 3.0.
+   In some cases it will not be able to figure out what file to patch;
+   skip past those by typing RETURN.
+   Record any problems you had in applying the patch.
+
+   >> patch -p1 < ../quote-patch.txt
+
+      |diff --git a/HACKING b/HACKING
+      |index 3a99833..522e0b5 100644
+      |--- a/HACKING
+      |+++ b/HACKING
+      --------------------------
+      File to patch: 
+
+      Skipping patch.
+      1 out of 1 hunk ignored
+
+      ==> Missing file
+
+      patching file README
+      Hunk #1 FAILED at 9.
+      Hunk #3 FAILED at 60.
+      2 out of 3 hunks FAILED -- saving rejects to file README.rej
+
+      ==> Patching fail
+      
+      patching file README-hacking
+      Hunk #1 FAILED at 19.
+      1 out of 1 hunk FAILED -- saving rejects to file README-hacking.rej
+
+      ==> Patching fail
+      
+      patching file cfg.mk
+      Hunk #1 FAILED at 29.
+      1 out of 1 hunk FAILED -- saving rejects to file cfg.mk.rej
+
+      ==> Patching fail
+
+      --------------------------
+      |diff --git a/doc/diffutils.texi b/doc/diffutils.texi
+      |index 58b140c..00403df 100644
+      |--- a/doc/diffutils.texi
+      |+++ b/doc/diffutils.texi
+      --------------------------
+      File to patch:
+      Skipping patch.
+      1 out of 1 hunk ignored
+
+      ==> Missing file
+
+      --------------------------
+      |diff --git a/man/help2man b/man/help2man
+      |index f9983f7..8bc961c 100755
+      |--- a/man/help2man
+      |+++ b/man/help2man
+      --------------------------
+      Skipping patch.
+      9 out of 9 hunks ignored
+
+      ==> Missing file
+      
+      patching file src/diff.c
+      Hunk #10 FAILED at 876.
+      Hunk #11 FAILED at 906.
+      Hunk #12 FAILED at 942.
+      3 out of 14 hunks FAILED -- saving rejects to file src/diff.c.rej
+
+      ==> Patching fail
+      
+      patching file src/diff3.c
+      Hunk #6 FAILED at 433.
+      1 out of 9 hunks FAILED -- saving rejects to file src/diff3.c.rej
+
+      ==> Patching fail
+
+===============================================================================
+7. Use the git status command to get an overview of what happened.
+
+   >> git status
+
+On branch orignal_v3.0
+Changes not staged for commit:
+  (use "git add <file>..." to update what will be committed)
+  (use "git checkout -- <file>..." to discard changes in working directory)
+
+	modified:   NEWS
+	modified:   README
+	modified:   TODO
+	modified:   doc/diagmeet.note
+	modified:   ms/config.bat
+	modified:   ms/config.site
+	modified:   po/en.po
+	modified:   src/analyze.c
+	modified:   src/cmp.c
+	modified:   src/context.c
+	modified:   src/diff.c
+	modified:   src/diff.h
+	modified:   src/diff3.c
+	modified:   src/dir.c
+	modified:   src/ifdef.c
+	modified:   src/io.c
+	modified:   src/sdiff.c
+	modified:   src/side.c
+	modified:   src/system.h
+	modified:   src/util.c
+	modified:   tests/help-version
+
+Untracked files:
+  (use "git add <file>..." to include in what will be committed)
+
+	NEWS.orig
+	README-hacking.orig
+	README-hacking.rej
+	README.orig
+	README.rej
+	cfg.mk.orig
+	cfg.mk.rej
+	ms/config.site.orig
+	src/cmp.c.orig
+	src/context.c.orig
+	src/diff.c.orig
+	src/diff.c.rej
+	src/diff.h.orig
+	src/diff3.c.orig
+	src/diff3.c.rej
+	src/dir.c.orig
+	src/sdiff.c.orig
+	src/system.h.orig
+	src/util.c.orig
+	tests/help-version.orig
+
+no changes added to commit (use "git add" and/or "git commit -a")
+
+===============================================================================
+8. Learn how to use the Emacs functions vc-diff (C-x v =) and
+   vc-revert (C-x v u). When you're in the *vc-diff* buffer generated
+   by vc-diff, use describe-mode (C-h m) to find out the Emacs functions that
+   you can use there, and in particular learn how to use the
+   diff-apply-hunk (C-c C-a) and diff-goto-source (C-c C-c) functions.
+
+
+   C-x v =
+       Compare the work files in the current VC fileset with the versions
+       you started from (vc-diff).
+
+  C-x v u
+      Revert the work file(s) in the current VC fileset to the last
+      revision (vc-revert).
+
+  C-c C-a
+      Apply this hunk to its target file (diff-apply-hunk).
+      With a prefix argument of C-u, revert this hunk. 
+
+  C-c C-c
+      Go to the source file and line corresponding to
+      this hunk (diff-goto-source).    
+
+===============================================================================
+9. Use Emacs to revert all the changes to files other than .c files,
+   since you want only changes to .c files.
+   Also, and don't forget this part, undo all the changes to .c files other
+   than changes to character string constants,
+   as the character-string changes are the only changes that you want;
+   this may require editing some files by hand.
+
+   A. No .c files
+
+      NEWS,
+      README,
+      TODO,
+      doc/diagmeet.note
+      ms/config.bat
+      ms/config.site
+      po/en.po
+      src/diff.h
+      src/system.h
+      tests/help-version
+
+      Open each file with emacs and type
+      >> C-x v u
+      >> yes
+
+   B. .c files
+
+      Open each of following file and type
+      >> C-x v =
+
+      To revert comment changes
+      >> C-u C-c C-a
+      To apply the hunk
+      >> C-c C-a
+      To go to the line
+      >> C-c C-c
+      
+      src/analyze.c
+        line 38 : Revert
+	line 251: Revert
+	line 595: Revert
+      
+      src/cmp.c
+	line 36: Revert
+	line 115: Keep
+	line 134: Keep
+	line 185: Keep
+	line 231: Keep
+	line 257: Keep
+	line 269: Keep
+	line 364: Revert
+	line 377: Revert
+	
+      src/context.c
+	line 159: Revert
+	line 289: Revert
+	line 393: Revert
+	line 431: Revert
+	line 459: Revert
+	
+      src/diff.c
+	line 40: Revert
+	line 58: Revert
+	line 92: Revert
+	line 330: Keep
+	line 505: Keep
+	line 534: Keep
+	line 585: Keep
+	line 744: Keep
+	line 826: Keep
+	line 960: Keep
+	line 1159: Keep
+	
+      src/diff3.c
+	line 35: Revert
+	line 159: Revert
+	line 316: Keep
+	line 351: Keep
+	line 412: Keep
+	line 460: Keep
+	line 1275: Keep
+	line 1475: Revert
+	
+      src/dir.c
+	line 84: Revert
+	line 125: Revert
+	line 154: Keep
+	line 243: Revert
+	
+      src/ifdef.c
+	line 132: Revert
+	
+      src/io.c
+	line 57: Revert
+	
+      src/sdiff.c
+	line 35: Revert
+	line 92: Revert
+	line 175: Keep
+	line 230: Keep
+	line 286: Keep
+	line 572: Keep
+	line 747: Revert
+	
+      src/side.c
+	line 292: Revert
+	line 302: Revert
+	line 310: Revert
+	
+      src/util.c
+	line 27: Revert
+	line 121: Revert
+	line 146: Revert
+	line 190: Revert
+	line 241: Revert
+	line 270: Revert
+	line 298: Keep
+	line 650: Revert
+
+===============================================================================
+10. Use Emacs to examine the files src/*.c.rej carefully,
+    and copy rejected patches into the corresponding .c files as needed.
+
+    >> emacs src/*.c.rej
+src
+    A. diff.c.rej
+	line 876
+	N_("    --suppress-blank-empty    suppress space or tab before empty output lines"),
+	-  N_("-l, --paginate                pass output through `pr' to paginate it"),
+	+  N_("-l, --paginate                pass output through 'pr' to paginate it"),
+	"",
+
+        line 906
+	"",
+	-  N_("-D, --ifdef=NAME                output merged file with `#ifdef NAME' diffs"),
+	+  N_("-D, --ifdef=NAME                output merged file with '#ifdef NAME' diffs"),
+
+	 "    of diff, generalizing -D/--ifdef."),
+	 -  N_("  LTYPE is `old', `new', or `unchanged'.  GTYPE is LTYPE or `changed'."),
+	 +  N_("  LTYPE is 'old', 'new', or 'unchanged'.  GTYPE is LTYPE or 'changed'."),
+	 
+	   
+       line 942
+       "",
+       -  N_("FILES are `FILE1 FILE2' or `DIR1 DIR2' or `DIR FILE...' or `FILE... DIR'."),
+       +  N_("FILES are 'FILE1 FILE2' or 'DIR1 DIR2' or 'DIR FILE...' or 'FILE... DIR'."),
+        N_("If --from-file or --to-file is given, there are no restrictions on FILE(s)."),
+	-  N_("If a FILE is `-', read standard input."),
+	+  N_("If a FILE is '-', read standard input."),
+	
+
+    B. diff3.c.rej
+
+    line 433:
+    N_("-X                          like -x, but bracket conflicts"),
+    -  N_("-i                          append `w' and `q' commands to ed scripts"),
+    +  N_("-i                          append 'w' and 'q' commands to ed scripts"),
+    "", 
+
+
+    ==> I manually changed each of them.
+
+===============================================================================
+11. Remove all untracked files that git status warns you about,
+    since you don’t plan on adding any files in your patch.
+
+    >> find . -name "*.orig" -type f
+    >> find . -name "*.rej" -type f
+
+    To check it shows correctly
+
+    >> find . -name "*.orig" -type f -delete
+    >> find . -name "*.rej" -type f -delete
+
+    To check if it's deleted
+    >> git status
+
+    and it succesfully deleted all untracked files.
+
+===============================================================================
+12. When you’re done with the above, git status should report
+    a half-dozen modified files,
+    and git diff should output a patch that is three or four hundred lines long.
+    Put that patch into a file quote-3.0-patch.txt.
+
+    >> git status
+    On branch orignal_v3.0
+    Changes not staged for commit:
+  (use "git add <file>..." to update what will be committed)
+  (use "git checkout -- <file>..." to discard changes in working directory)
+
+	modified:   src/cmp.c
+	modified:   src/diff.c
+	modified:   src/diff3.c
+	modified:   src/dir.c
+	modified:   src/sdiff.c
+	modified:   src/util.c
+
+   >> git diff > ../quote-3.0-patch.txt
+
+===============================================================================
+13. Build the resulting modified version of Diffutils,
+    using the commands described in the file README-hacking,
+    skipping the part about CVS; CVS is obsolescent.
+    (If you are building on lnxsrv07 or lnxsrv09 or any other host that is
+    using version 2.16 or later of the GNU C Library,
+    you will need to apply an additional patch after running
+    ./bootstrap and before running ./configure, because glibc 2.16 removed the
+    obsolete and dangerous gets function declared by a Diffutils header.)
+    Verify that Diffutils does the right thing with the “diff .-”
+    scenario, as well as with “diff --help”.
+
+
+
+    I change the sever to lnxsrv03 and
+    >> export PATH="/usr/local/cs/bin/:$PATH"
+    To make check work(following steps are shared by TA)
+    >> emacs tests/Makefile.am
+    change
+	 ; shell_or_perl_
+	 to
+	 ;
+    >> chmod +x tests/binary tests/no-newline-at-eof
+    >> ./bootstrap
+    >> ./configure
+    >> make
+    >> make check
+
+    Success!
+
+    >> ./src/diff . -
+    , which showed
+      ./src/diff: cannot compare '-' to a directory
+      
+    >> ./src/diff --help
+    , and it correctly showed ' ' instead of ` '
+
+    So success!!
+
+===============================================================================
+14. Do a sanity test using the modified version of Diffutils that
+    you just built, by using the just-built diff to compare the source code of
+    Diffutils 3.0 to the source code of your modified version.
+    Put the former source code into a directory diffutils-3.0 and the latter
+    source code into a directory diffutils-3.0-patch,
+    and run your implementation of diff with the command
+    “D/diff -pru diffutils-3.0 diffutils-3.0-patch >quote-3.0-test.txt”,
+    where the D is the directory containing your diff implementation.
+
+
+    Under the  ~/Documents/cs35l/lab9
+    >> mkdir diffutils-3.0
+    >> mkdir diffutils-3.0-patch
+    >> mkdir original
+    >> cd original
+    >> git clone ~eggert/src/gnu/diffutils
+    >> cd diffutils
+    >> git checkout v3.0 -b orignal_v3.0
+
+    >> cp ./src/*.c ../../diffutils-3.0/
+    >> cd  ~/Documents/cs35l/lab9
+    >> cp ./diffutils/src/*.c ./diffutils-3.0-patch/
+
+    >> ./diffutils/src/diff -pru diffutils-3.0 diffutils-3.0-patch >quote-3.0-test.txt
+
+
+===============================================================================
+15. Use diff to compare the contents of quote-3.0-test.txt and
+    quote-3.0-patch.txt. Are the files identical?
+    If not, are the differences innocuous?
+
+    >> diff -u quote-3.0-test.txt quote-3.0-patch.txt
+
+    , which showed a lot of differences.
+    However, if we look at the details, the most of change was from ` to ',
+    and also variable name change, and there were no major logical change.
+    So the differences are innocuous.
+===============================================================================
+
+
+
+
+

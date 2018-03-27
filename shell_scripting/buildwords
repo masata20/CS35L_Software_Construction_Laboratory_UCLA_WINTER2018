@@ -1,0 +1,15 @@
+#!/bin/bash
+
+#detail explanation is in my lab2.log
+
+sed -n '29,985p' |                                     
+sed '/<tr>/,/<\/td>/d' |                                     
+sed '/<\/tr>/d' |                                            
+sed 's/<[^>]*>//g' |                                         
+tr  [:upper:] [:lower:] |                                    
+tr '\`' "\'" |                                               
+tr ' ' '\n' |                                                
+tr ',' '\n' |                                                
+tr -cs "pk\'mnwlhaeiou" '[\n*]' |                            
+sort -u |                                                    
+sed '/^$/d' 

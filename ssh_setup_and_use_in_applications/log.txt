@@ -1,0 +1,295 @@
+
+Name: Masataka Mori
+
+
+
+Laboratory: SSH setup and use in applications
+
+===============================================================================
+0. Reset the Beagleboen Green Wireless.
+
+   My beagle bone was new one, but while working on the following section 1,
+   and tried to fix some errors on "sudo apt-get update", and my board didn't
+   work after that at all, so I decided to reset it.
+
+   Reference: http://wiki.seeed.cc/BeagleBone_Green/#update-to-latest-software
+   Follow the step "Update to latest software"
+
+   As image, I picked
+   https://debian.beagleboard.org/images/bone-debian-8.10-seeed
+		-iot-armhf-2018-02-01-4gb.img.xz
+
+   Since I am using Mac, I downloaded
+   The Unarchiver to decompress
+   and
+   Pi Filler.app to write to micro SD.
+
+   Put microSD to my beaglebone and power on.
+   
+   I needed to write the image to your on-board eMMC, so during resetting
+   >> sudo ssh debian@192.168.7.2
+   >> temppwd
+   >> sudo su   -> to access on root. I couldn't access root directly because
+      	   	   of unknown password.
+		   But this way can access to root.
+   >> vim /boot/uEnv.txt
+   and uncommend the most last sentence which is similar to the reference
+   website says.
+   >> reboot
+
+   Then, light up as the website says.
+   After around 10 min or 15 min, all the 4 led lighted up ligitly,
+   and it automatically powered off.
+
+   After, extracting micro SD from the beaglebone, power on.
+   and everything worked properly.
+   
+===============================================================================
+1. Setting Up Beaglebone.
+   (Credit: TA's notes on piazza)
+
+   A. Connect Beaglebone by using USB cable
+   B. Select the BEAGLEBONE as an external strage device on Finder
+   C. Open "START.htm" file, and follow the step(installing some drives)
+   D. Change the WiFi to your Beaglebone
+      	     in my case:
+
+   F. In terminal,
+      >> sudo ssh root@192.168.7.2
+      >> <type your password to login your computer"
+      , which showed
+      port 22: Network is unreachable
+
+      To solve it, I looked up another notes in Piazza and follow the
+      following step:
+      Install another drive:
+      	  http://disq.us/url?url=http%3A%2F%2Fnyus.joshuawise.com%2FHoRNDIS-
+	         rel8pre2-dbg.pkg%3AnWVXptevoA9QSEAQQXuPQfiJ240&cuid=1845838
+
+      To remove the previously installed drive
+      >> sudo rm -rf /System/Library/Extensions/HoRNDIS.kext
+
+      Try again
+      >> sudo ssh root@192.168.7.2
+      >> <type yes>
+      succesfully logged(SSH) into Beaglebone, which shows
+      root@beaglebone:~#, on your command line
+
+   E. Connect beaglebone to wifi
+
+       To do manually, we use "connmanctl".
+       root@beaglebone:~# sudo connmanctl
+       // Turn on the wifi for the Beaglebon
+       connmanctl> enable wifi
+       // Scan all available wifi access points
+       connmanctl> scan wifi
+       // list all the discovered access points
+       connmanctl> services
+       // register as the prospective cliant
+       connmanctl> agent on
+       connmanctl> connect <wifi name start from wifi_ found from list of
+       		   	    access points>
+
+           If it's wifi_506583d4fc5e_544e434150413937414239_managed_psk,
+	   Passphares? 3760ClassNet
+        Since it's connected to WiFi
+	connmanctl> quit
+
+   F. Find my IP address
+
+      root@beaglebone:~# ifconfig
+
+      , and under the wlan0, label as inet addr, which was:
+      <MY_IP_ADDRESS>
+
+   G. Update database of apt-get
+
+      root@beaglebone:~# sudo apt-get update
+
+      => at first, i got several error, but reason was WiFi on my Beaglebone
+      	 we were supposed to choose the WiFi which don't need to password.
+	 I used UCLA_WEB.
+      
+   H. Install xauth tool for X11 forwading support
+
+      root@beaglebone:~# sudo apt-get install xauth
+
+   I. Install some application to check X11 forwarding
+
+      root@beaglebone:~# apt-get install firefox-esr-l10n-en-gb
+
+      check if its working
+      root@beaglebone:~# firefox
+      	Error: GDK_BACKEND does not match available displays
+	I'll solve later
+
+      root@beaglebone:~# apt-get install xterm
+      root@beaglebone:~# apt-get install gedit
+
+   We are now done with setting up!!!!!!!
+ ==============================================================================
+ 2. Setting up OpenSSH onto beaglebone (for insurance)
+
+    // to install client applications
+    root@beaglebone:~# sudo apt-get install openssh-client
+    // to install server application
+    root@beaglebone:~# sudo apt-get install openssh-server
+
+    => it showed it is already installed, so it's fine.
+
+    (refernce: https://help.ubuntu.com/lts/serverguide/openssh-server.html)
+===============================================================================
+3. Sever side work
+   (Credit to TA's slide)
+   
+   A. Generate public and private keys
+
+      root@beaglebone:~# ssh-keygen
+      , by default saved to ~/.ssh/is_rsa and id_rsa.pub
+      >> Enter
+      passphrase: masataka
+
+   B. Create an account for the client on the server
+
+     1. Use sudo useradd –d /home/<homedir_name> –m <username>
+
+     	root@beaglebone:~# sudo useradd -d /home/aditi -m aditi
+
+     2. Make password for above account
+
+     	root@beaglebone:~# sudo passwd aditi
+	>> Enter new UNIX password: aditi
+
+   C. Create .ssh directory for new user
+
+      root@beaglebone:~# cd /home/aditi
+
+      root@beaglebone:~# sudo mkdir .ssh
+
+   D. Change ownership and permission on .ssh directory
+
+      root@beaglebone:~# sudo chown –R aditi .ssh
+      root@beaglebone:~# sudo chmod 700 .ssh
+
+  
+
+  
+
+  
+===============================================================================
+4. Client Side Work
+   (Credit to TA's slide)
+
+
+   0. ssh-keygen
+
+      passpharese: aditi
+
+   A. Copy your public key to the server for key-based
+      authentication (~/.ssh/authorized_keys)
+      Using ssh-copy-id –i UserName@server_ip_addr
+
+      root@beaglebone:~# ssh-copy-id  aditi@172.29.4.231
+      password: aditi
+
+   B. Add private key to authentication agent (ssh-agent)
+
+      root@beaglebone:~# ssh-add
+
+   C. SSH to server
+      Use: ssh UserName@server_ip_addr
+      
+      root@beaglebone:~# ssh 'aditi@172.29.4.231'
+      passphrease: aditi
+
+   D. Use port forwarding and run the command
+      Use: ssh –X UserName@server_ip_addr 
+
+      root@beaglebone:~# ssh –X aditi@172.29.4.231
+
+      >> xterm
+      	 xterm: Xt error: can't open display:
+	 xterm: DISPLAY is not set
+      >> gedit
+      	 Unable to init server: Could not connect: connection refused
+	 (gedit:27429): Gtk-WARNING **: cannot open display:
+	 
+      >> firefox
+      Error: GDK_BACKEND does not match avialbe displays
+================================================================================      
+5. Solve issues with xterm, gedit, firefox.
+
+   A. Check some files (Credit to TA's note)
+      (I did this for both client and serverside)
+      1. 
+      >> sudo apt-get install xvfb
+      , still showed same errors as above.
+
+      2. modify /etc/ssh/ssh_config
+
+      	-> change
+	ForwardX11 yes
+	ForwardAgent yes
+	and uncomment it.
+
+	=> still not working
+
+      3. modify /etc/ssh/sshd_config
+
+      	 it had X11Forwarding yes already.
+	 So left as it is
+
+
+  B. Tried to connect to proper diplay.
+     (only on client side)
+    I tried
+    > export DISPLAY='172.29.4.231:0.0'
+    > export DISPLAY="127.0.0.1:10.0"
+    , and someothers, but it still didn't work.
+
+
+  C. Use XQuartz
+     (only on client side)
+
+     Reference: https://uisapp2.iu.edu/confluence-prd/pages
+			/viewpage.action?pageId=280461906
+     1. Install XQuarztz on Clients' computer, not on beaglebone
+     	on Mac itself.
+
+     2. Invoke XQuartz terminal
+
+     	>> sudo ssh -X debian@192.168.7.2
+
+	>> ssh -X aditi@172.29.4.231
+
+	>> xterm
+
+	-> after a few seconds,
+	   it successfully invoked xterm
+
+        >> gedit
+
+	-> after a few seconds,
+	   it successfully invoked gedit
+
+       >> firefox
+        -> after a few seconds,
+	   it successfully invoked firefox
+
+     Note: When the client logged in its beaglebone as
+     	   root, above didn't work.
+
+      => All xterm, gedt, firefox, worked properly now.
+	   
+================================================================================
+6. To obtain /sys/bus/i2c/devices/0-0050/eeprom
+
+   Since even after resetting, I couldn' directory login to root
+   >> sudo ssh debian@192.168.7.2
+   >> sudo chmod -R 777 /sys/bus/i2c/devices/0-0050/eeprom
+   >> exit
+
+   >> sudo sftp debian@192.168.7.2
+   >> get /sys/bus/i2c/devices/0-0050/eeprom
+
+   => done!

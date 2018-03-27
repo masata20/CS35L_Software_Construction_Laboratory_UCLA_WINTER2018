@@ -1,0 +1,443 @@
+
+Name: Masataka Mori
+
+Lab Note: Spell-checking Hawaiian
+
+1. Check and set the locale to the standard C
+
+   Since all locale was set to en_US.UTF-8,
+   we need to change in the standard C.d
+
+   >> export LC_ALL='C'
+
+2. Make the file words, which contains a sorted list of English words.
+
+   Under my working directory,
+   >> sort /usr/share/dict/words > words
+
+3. Create a text file containing the HTML in the assignment page
+
+   >> wget https://web.cs.ucla.edu/classes/winter18/cs35L/assign/assign2.html
+
+   Created file name is
+   assign2.html
+
+4. Run some commands and Compare each other.
+
+   To make the file we created be the standard input, we use
+   < assign2.html following with tr commands.
+
+   >> man tr
+   The formant of tr is
+   tr [OPTION]... SET1 [SET2]
+
+   Type A:
+   	>> tr -c 'A-Za-z' '[\n*]' < assign2.html
+
+	SET1 = A-Za-z -> Capital A through B and small a through b
+	SET2 = [\n*]   -> new line
+
+	Since we are using the -c option, it translate the each character
+	to new line when machine reads the complement of A-Za-z.
+	Meaning, whenever it encounter to the nonalpabetical chacarter,
+	it will output the newline instead of the original character.
+	If charcter was in the A-Za-z, it will be printed as it was in
+	original.
+
+   Type B:
+   	>> tr -cs 'A-Za-z' '[\n*]' < assign2.html
+
+	Same sets as Type A, but different option.
+	According to the manual page of tr,
+	    -s:
+		Squeeze multiple occurrences of the characters listed
+		in the last operand (either string1 or string2) in the
+		input into a single instance of the character.
+		This occurs after all deletion and translation is completed.
+
+	It also uses -c same as Type A, and it combined with option -s.
+	Therefore, it translate the chacacters with the same behavior as
+	type A, but since we have the -s option, it eliminate the all
+	empty new lines except the first occurance of the empty new line
+	character.
+
+   Type C:
+   	>> tr -cs 'A-Za-z' '[\n*]' < assign2.html | sort
+
+	Exactly same character output of type C since the tr command
+	are identical.
+	However, since we are using the result of tr command as input
+	to the sort command. The final output is the alphabetically sorted
+	(A-Z and a-z order) characters of type B result.
+	It also output the empty new line chacter in the very
+	first line like type B.
+
+   Type D:
+   	>> tr -cs 'A-Za-z' '[\n*]' < assign2.html | sort -u
+
+	According to
+	http://pubs.opengroup.org/onlinepubs/9699919799/utilities/sort.html
+	-u option:
+	   suppress all but one in each set of lines having equal keys.
+
+	Therefore, it output the same characters as type C; however,
+	because of -u option, it compressed the occurance of character to
+	only once when the character occured multiple times.
+	It didn't show same characters as many as it occured like type C.
+
+   Type E:
+   	>> tr -cs 'A-Za-z' '[\n*]' < assign2.html | sort -u | comm - words
+
+	According the manual page of command comm,
+	  comm - compare two sorted files line by line
+	  comm [OPTION]... FILE1 FILE2
+	        With no options, produce three-column output.
+		Column one contains lines unique to FILE1,
+		column two contains lines unique to FILE2,
+		and column three contains lines common to both files.
+
+	Therefore, it compares the output, which is same as type D, and
+	compare with the file words, which we created previously.
+	As it stated in above, in colunm 1 it output the word, which was
+	unique to result of type D, and in column 2, it output the word
+	which was unique to the file 'word', and in colunm 3,
+	it output the lines which was same in both result of type D and
+	file 'word'
+
+
+   Type F:
+   	>> tr -cs 'A-Za-z' '[\n*]' < assign2.html | sort -u |
+	                                             comm -23 - words
+
+	According to the manual page of comm, it stated
+	  -1     suppress column 1 (lines unique to FILE1)
+	  -2     suppress column 2 (lines unique to FILE2)
+	  -3     suppress column 3 (lines that appear in both files)
+
+	Since the above command using the -2 and -3 together,
+	it suppress colunm 2 and 3.
+	Therefore, it showed the same results as typeE; however,
+	it only showed the colunm1, and it suppressed the colunm 2 and 3,
+	which showed in type E.
+
+5. Get the copy of the web page for Hawaiian dictionary
+
+   >> wget http://mauimapp.com/moolelo/hwnwdseng.htm
+
+6. Preparare to create the bash file. (list commands, we need to use)
+
+   What we want to make here as the bash file is extracting all Hawaiian
+   words line by line( eliminate all other characters ) and sort them
+   into one file.
+   To do this, we need to use many sed command and tr command.
+   For sed commands, I refered following URLs(given by TA):
+   http://www.yourownlinux.com/2015/04
+                        /sed-command-in-linux-print-lines-in-file.html
+   http://www.yourownlinux.com/2015/04
+                       /sed-command-in-linux-delete-lines-from-file.html
+
+   A. Extract only the table part of HTML code
+
+      Since we don't need anything before and after the table,
+      let's elimminate them first.
+      The table section starts from line 29,
+      and it ends at line 985.
+      To extract this range, we need to use this command on our bash file.
+      >> sed -n '29,985p'  hwnwdseng.htm
+
+   B. Extract only Hawaiian words.
+
+      Since English words always starts with <tr> and end with </td>.
+      Let's remove them.
+      To do that
+      >> sed '/<tr>/,/<\/td>/d' hwnwdseng.htm
+
+      Combine with A,
+      >> sed -n '29,985p' hwnwdseng.htm | sed '/<tr>/,/<\/td>/d'
+
+
+   C. Remove the line which contains unnecessary tags.
+
+      First, we need to delete the line starting with </tr>, so
+      >> sed '/<\/tr>/d'
+
+      Combine with above,
+      >> sed -n '29,985p' hwnwdseng.htm |
+                 sed '/<tr>/,/<\/td>/d' |
+		 sed '/<\/tr>/d'
+
+   D. Delete the unncessary tag <td>, <u>, </u>
+
+      Since each tag has from starting with '<' and end with '>',
+      we can use regex to delete all at once.
+      Starting from '<'
+      and any any 0 or more characters except '>' (use [^])
+      ending with first '>'
+
+      >> sed 's/<[^>]*>//g'
+
+      combine with above,
+      >> sed -n '29,985p' hwnwdseng.htm |
+                 sed '/<tr>/,/<\/td>/d' |
+		 sed '/<\/tr>/d' |
+		 sed 's/<[^>]*>//g'
+
+
+   E. Convert all upper case to lower case
+
+      >> tr [:lower:] [:upper:]
+
+      >> sed -n '29,985p' hwnwdseng.htm |
+                 sed '/<tr>/,/<\/td>/d' |
+		 sed '/<\/tr>/d' |
+		 sed 's/<[^>]*>//g' |
+		 tr  [:upper:] [:lower:]
+
+   F. Conver all "`" to "'"
+
+       >> tr '\`' "\'"
+
+       >> combine with all
+       >> sed -n '29,985p' hwnwdseng.htm |
+                 sed '/<tr>/,/<\/td>/d' |
+		 sed '/<\/tr>/d' |
+		 sed 's/<[^>]*>//g' |
+		 tr  [:upper:] [:lower:] |
+		 tr '\`' "\'"
+
+   G. Treat words contains spaces or commas as multiple words
+
+      To do that, we can just replace the 'space' or 'commas' to
+      new line chacarter.
+
+      >> tr ' ' '\n'
+      >> tr ',' '\n'
+
+      >> combine with above
+      >> sed -n '29,985p' hwnwdseng.htm |
+                 sed '/<tr>/,/<\/td>/d' |
+		 sed '/<\/tr>/d' |
+		 sed 's/<[^>]*>//g' |
+		 tr  [:upper:] [:lower:] |
+		 tr '\`' "\'" |
+		 tr ' ' '\n' |
+		 tr ',' '\n'
+
+   H. Reject any entries that contain non-Hawaiian letters
+
+      Hawaian letters = " p k ' m n w l h a e i o u "
+
+      By using the previous problem method,
+      >> tr -cs "pk\'mnwlhaeiou" '[\n*]'
+
+
+      >> sed -n '29,985p' hwnwdseng.htm |
+                 sed '/<tr>/,/<\/td>/d' |
+		 sed '/<\/tr>/d' |
+		 sed 's/<[^>]*>//g' |
+		 tr  [:upper:] [:lower:] |
+		 tr '\`' "\'" |
+		 tr ' ' '\n' |
+		 tr ',' '\n' |
+		 tr -cs "pk\'mnwlhaeiou" '[\n*]'
+ 
+
+   I. Sort and remove any remove duplicates
+
+      By using the previous problem method,
+      >> sort -u
+
+      >> sed -n '29,985p' hwnwdseng.htm |
+                 sed '/<tr>/,/<\/td>/d' |
+		 sed '/<\/tr>/d' |
+		 sed 's/<[^>]*>//g' |
+		 tr  [:upper:] [:lower:] |
+		 tr '\`' "\'" |
+		 tr ' ' '\n' |
+		 tr ',' '\n' |
+		 tr -cs "pk\'mnwlhaeiou" '[\n*]' |
+		 sort -u
+
+   J. Delete all empty line (for insurance)
+
+      >> sed '/^$/d'
+
+      Combine all
+      >> sed -n '29,985p' hwnwdseng.htm |
+                 sed '/<tr>/,/<\/td>/d' |
+		 sed '/<\/tr>/d' |
+		 sed 's/<[^>]*>//g' |
+		 tr  [:upper:] [:lower:] |
+		 tr '\`' "\'" |
+		 tr ' ' '\n' |
+		 tr ',' '\n' |
+		 tr -cs "pk\'mnwlhaeiou" '[\n*]' |
+		 sort -u |
+		 sed '/^$/d'
+
+7. Create the buildwords shell script by using above commands.
+
+   To copy paste the shell script, I use the method we learned from
+   the previous lab.
+
+   By opening the buildwords file by emacs
+   >> C-Shift-SP M->
+   >> M-x a p p e n d - t o - f i l e Enter
+   >> l a b 2 . l o g Enter
+----------------------appended shell script--------------------------
+#!/bin/bash
+
+#detail explanation is in my lab2.log
+
+sed -n '29,985p' |                                     
+sed '/<tr>/,/<\/td>/d' |                                     
+sed '/<\/tr>/d' |                                            
+sed 's/<[^>]*>//g' |                                         
+tr  [:upper:] [:lower:] |                                    
+tr '\`' "\'" |                                               
+tr ' ' '\n' |                                                
+tr ',' '\n' |                                                
+tr -cs "pk\'mnwlhaeiou" '[\n*]' |                            
+sort -u |                                                    
+sed '/^$/d'
+-------------------------------------------------------------------
+
+8. Run the above shell script and put into hwords file
+   as a Hawaiian dictionary
+
+   >> cat hwnwdseng.htm | ./buildwords > hwords
+   , showed me
+   -bash: ./buildwords: Permission denied
+
+   to get permission
+   >> chmod +x buildwords
+
+   then try again
+   >> cat hwnwdseng.htm | ./buildwords > hwords
+
+   Success!!
+
+
+9. Checks the misspelling of English words
+
+   By using the step 4's methods,
+   >> cat assign2.html |
+      tr -cs 'A-Za-z' '[\n*]' |
+      tr [:upper:] [:lower:] |
+      sort -u |
+      sed '/^$/d' |         // to delete unnecessary empty line
+      comm -23 - words |
+      wc -l
+
+   , which showed:
+     comm: file 2 is not in sorted order
+     413
+
+   Remeber that I didn't use -u for words file, so
+   >> sort -u /usr/share/dict/words > words
+
+   Now, try again
+   >> cat assign2.html |
+      tr -cs 'A-Za-z' '[\n*]' |
+      tr [:upper:] [:lower:] |
+      sort -u |
+      sed '/^$/d' |
+      comm -23 - words |
+      wc -l
+
+   , which showed
+     38
+   -> so 38 misspelling English words.
+
+ 10. Checks the misspelling of Hawaiian words
+
+    >> cat assign2.html |
+      tr -cs "pk\'mnwlhaeiou" '[\n*]' |
+      tr [:upper:] [:lower:] |
+      sort -u |
+      sed '/^$/d' |
+      comm -23 - hwords |
+      wc -l
+
+    ,which showed
+    198
+   -> so 198 misspelling of Hawaiian words.
+
+11. Examples of misspelled as English, but not as Hawaiian
+
+    First, we can make the files for each output from 9 and 10.
+    Note that we need to exclude commnad
+    wc -l
+    
+    >> cat assign2.html |
+      tr -cs 'A-Za-z' '[\n*]' |
+      tr [:upper:] [:lower:] |
+      sort -u |
+      sed '/^$/d' |
+      comm -23 - words > eng_mis
+
+    Eliminate all the Non-Hawaiian words and compare with hwords.
+
+    >> cat eng_mis |
+       tr -cs "pk\'mnwlhaeiou" '[\n*]' |
+       sort -u |
+       sed '/^$/d' |
+       comm -12 - hwords
+                  // Since we want to see the common one, so -23
+
+       , which shows:
+       	 e
+	 halau
+	 i
+	 lau
+	 po
+	 wiki
+
+12. Examples of misspelled as Hawaiian, but not as English
+
+    >> cat assign2.html |
+      tr -cs "pk\'mnwlhaeiou" '[\n*]' |
+      tr [:upper:] [:lower:] |
+      sort -u |
+      sed '/^$/d' |
+      comm -23 - hwords > hawaii_mis
+
+   Eliminate all Non-English words and compare with words
+
+   >> cat hawaii_mis |
+      tr -cs 'A-Za-z' '[\n*]' |
+      sort -u |
+      sed '/^$/d' |                                                          
+      comm -12 - words
+
+      , which shows:
+      (only first portion, since there were 109 of them
+      counted by wc -l following above command)
+      	      a
+	      ail
+	      ain
+	      ake
+	      al
+	      ale
+	      alen
+	      all
+	      amine
+	      amp
+	      ample
+	      an
+	      aph
+	      aul
+	      awk
+	      e
+	      ea
+	      ee
+	      el
+	      em
+	      emp
+	      en
+	      ep
+	      epa
+	      h
+	      ha
+
+============================================================================

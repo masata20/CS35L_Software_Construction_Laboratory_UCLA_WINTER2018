@@ -1,0 +1,172 @@
+
+Name: Masataka Mori
+
+
+Homework: Verifying and publishing a backported change
+
+Directory Under the  ~/Documents/cs35l/hw9
+===============================================================================
+1. Check out version 3.0 of Diffutils from your repository,
+   into a new branch named “quote”.
+
+   >> git clone ~eggert/src/gnu/diffutils
+   >> cd diffutils
+   >> git checkout v3.0 -b quote
+
+===============================================================================
+2. Install your change into this new branch,
+   by running the patch command with your patch quote-3.0-patch.txt as input
+
+   >> patch -p1 < ~/Documents/cs35l/lab9/quote-3.0-patch.txt
+   , which showed
+     patching file src/cmp.c
+     patching file src/diff.c
+     patching file src/diff3.c
+     patching file src/dir.c
+     patching file src/sdiff.c
+     patching file src/util.c
+===============================================================================
+3. Learn how to use the Emacs function add-change-log-entry-other-window
+   (C-x 4 a).
+
+   C-x 4 a:
+       visits the change log file and creates a new entry unless
+       the most recent entry is for today's date and your name.
+       It also creates a new item for the current file.
+       For many languages, it can even guess the name of the function
+       or other object that was changed.
+===============================================================================
+4. Use this Emacs function to compose an appropriate ChangeLog entry
+   for your patch, by adapting the change log from the original patch.
+
+   >> emacs src/cmp.c
+   >> C-x 4 a
+
+   >> src/diff.c
+   >> C-x 4 a
+
+   >> emacs src/diff3.c
+   >> C-x 4 a
+
+   >> emacs src/dir.c
+   >> C-x 4 a
+
+   >> emacs src/sdiff.c
+   >> C-x 4 a
+
+   >> emacs src/util.c
+   >> C-x 4 a
+
+   >> emacs src/ChangeLog
+   and add comments
+
+===============================================================================
+5. Commit your changes to the new branch,
+   using the ChangeLog entry as the commit message.
+
+   >> git commit -aF src/ChangeLog
+ 
+   -a: Tell the command to automatically stage files that have been modified
+       and deleted, but new files you have not told Git about are not affected.
+
+   -F: Take the commit message from the given file.
+
+===============================================================================
+6. Use the command “git format-patch” to generate a file formatted-patch.txt.
+   This patch should work without having to fix things by hand afterwards.
+
+   >> git format-patch -1 --stdout > formatted-patch.txt
+
+===============================================================================
+7. Your teaching assistant will assign you a partner,
+   who will also generate a patch.
+   Verify that your partner's patch works, by checking out version 3.0 again
+   into a new temporary branch partner,
+   applying the patch with the command “git am”,
+   and building the resulting system, checking that it works with “make check”.
+
+   My Partner name: Aditi Mittal
+   and I got her formatted-patch.txt, and change the name to
+   aditi-formatted-patch.txt
+   ,and save it to folder
+   ~/Documents/cs35l/hw9
+
+
+
+   In master branch,
+   >> git checkout v3.0 -b aditi
+
+   >> git am ../aditi-formatted-patch.txt
+   , which showed
+   Applying: 2018-03-15 Aditi Mittal <aditim@lnxsrv09.seas.ucla.edu>
+
+
+   In lnxsrv03,
+   >> export PATH="/usr/local/cs/bin/:$PATH"
+
+   To make check work(following steps are shared by TA)
+   >> emacs tests/Makefile.am
+   change
+	 ; shell_or_perl_
+	 to
+	 ;
+   >> chmod +x tests/binary tests/no-newline-at-eof
+
+   >> ./bootstrap
+   >> ./configure
+   >> make
+   >> make check
+   , which showed:
+   ============================================================================
+Testsuite summary for GNU diffutils 3.0.1-32116-dirty
+============================================================================
+# TOTAL: 89
+# PASS:  88
+# SKIP:  1
+# XFAIL: 0
+# FAIL:  0
+# XPASS: 0
+# ERROR: 0
+============================================================================
+
+   So it's good!
+   
+   >> ./src/diff . -
+   ,which showed
+   ./src/diff: cannot compare '-' to a directory
+   
+   >> ./src/diff --help
+   , and it showed it correctly showed ' ' instead of ` '
+
+===============================================================================
+8. Verify that your ChangeLog entry works, by running the command
+   “make distdir” and inspecting the resulting diffutils*/ChangeLog file.
+
+   >> make distdir
+
+   >> emacs diffutils*/ChangeLog
+   , which showed
+   2018-03-15  Aditi Mittal  <aditim@lnxsrv09.seas.ucla.edu>
+   	       2018-03-15 Aditi Mittal <aditim@lnxsrv09.seas.ucla.edu>
+	        * changed all instances of ` to '
+   
+   in the top of the file, so
+   it's success!
+
+===============================================================================
+9. There is a copy of the GNU Emacs git repository's master branch on SEASnet
+   in the directory ~eggert/src/gnu/emacs.
+   Run the command gitk on it, and find the newest merge that is not
+   newer than 2015-01-25. Take a screenshot gitk-screenshot.png of your view
+   of the mergepoint, and in an ASCII text file gitk-description.txt briefly
+   describe the roles of subwindows that you see in the screenshot.
+
+
+   By using XQuartz Terminal
+   >> ssh -X masataka@lnxsrv07.seas.ucla.edu
+   >> export PATH=/usr/local/cs/bin:$PATH
+   >> cd ~eggert/src/gnu/emacs
+   >> gitk
+   , take the screenshot.
+
+===============================================================================

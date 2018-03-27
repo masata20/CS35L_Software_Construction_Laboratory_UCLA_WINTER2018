@@ -1,0 +1,56 @@
+Name: Masataka Mori
+
+===============================================================================
+1. Suppose the other teams really had been observing all the bytes
+   going across the network.
+   Is your resulting network still secure? If so, explain why, and
+   explain whether your answer would change if
+   (1) you assumed the other teams had also tapped your keyboards
+       and had observed all of your team's keystrokes, or
+   (2) you are booting off USB and you assume the other teams
+       temporarily had physical control of the USB.
+        If not, explain any weaknesses of your team's setups,
+	focusing on possible attacks by such outside observers.
+
+
+Ans:
+   For first problem, the answer is yes. The network is still secure
+   because even though they could see the bytes across the network,
+   they cannot observe the private key which is in the machine
+   and didn't cross the network, so the network is still secure.
+
+   (1) Yes, the network is still secure. Recalling the steps in the
+       lab part or gpg parts, even though there is a case we type
+       the public key, we have never typed a private key since
+       it was generated automatically by command and saved it into
+       the certai file. Since the private key is still safe, the
+       network is still secure.
+
+   (2) No, the network isnot secure anymore.
+       When the other team can control everything of the USB, they can
+       also take a look at the file where private key (or public key also)
+       is store(Recall the lab, we used ssh-keygen and the private and public
+       were store on the certain file. Used defaul in the lab.(when did "ssh-keygen")
+       Now, since the private key can be observed from theother team,
+       the network isn't secure anymore. 
+
+
+
+
+===============================================================================
+2. Explain why the gpg --verify command in the following instructions
+   doesn't really verify that you personally created the tar file in question.
+   How would you go about fixing this problem?
+
+   In the step of making a detached cleartext signature, we could
+   create the signature for any file even if the file wasn't created by
+   ourselves. What gpg --verify is doing just checking whether the signature
+   of <somefile>.sig and of the target file are the same or not.
+   It's not necessary to be a original creator to get good match in gpg
+   --verify.
+   To avoid this problem, we need to publish our own public key, which
+   was generated with our private key. The file can only be decrypt it
+   with that public key to read inside. If the file cannot be
+   decryped by that public key, it means it was modified by somewhere and
+   and someone by using different private key,
+   so that way, we can preserve the real author of that file.

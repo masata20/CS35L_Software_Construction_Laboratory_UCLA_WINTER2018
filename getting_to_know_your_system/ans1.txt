@@ -1,0 +1,597 @@
+Name: Masataka Mori
+
+
+Laboratory: Linux and Emacs scavenger hunt
+
+1. What shell command uses the man program to print the all the commands
+  that have a specific word in their man page (or at least description
+  part of the man page)?(hint: man man)
+  
+  	Ans:
+  		>> man -k <a spefic word>
+
+	Found from
+	>> man man
+	page, which states
+	
+	man -k printf
+	Descrption:
+		Search the short descriptions and manual page names for the 
+		keyword printf as  regular  expression.  
+		Print out any matches.  Equivalent to apropos -r printf.
+
+==============================================================================
+2. Where are the cp and wc programs located in the file system? 
+   List any shell commands you used to answer this question.
+	
+	 I used the -k option learned from No.1
+	 >> man -k path
+	 then, I found
+	 which (1)            - shows the full path of (shell) commands.
+	 >> man which
+	 it says:
+	 	Description:
+	 		Which takes one or more arguments. 
+			For each of its arguments it prints to stdout the
+			full path of the executables that would have been 
+			executed when this argument had been entered 
+			at the shell prompt.
+	so I tried
+	>> which cp wc
+	/usr/local/cs/bin/cp
+	/usr/local/cs/bin/wc
+
+==============================================================================
+3. What executable programs have names that are just one character long,
+   and what do they do? List any shell commands you used to answer this 
+   question.
+	
+	First, I need to find the way to find the executable programs
+	so I look into find command
+	>> man find
+		, and I found
+		-executable option which can search only for executable
+		program
+
+	>> find -executable
+		, which showed all the executable program under the
+		current directory
+	
+	Now, all the executable programs must be in the bin directory.
+	There are several field we must check.
+	To see all the field
+	>> echo $PATH
+	/usr/local/cs/bin:
+	/usr/lib64/qt-3.3/bin:
+	/u/cs/ugrad/masataka/perl5/bin:
+	/usr/lib64/ccache:
+	/usr/local/bin:
+	/usr/bin:
+	/usr/X11R6/bin:
+	/u/cs/ugrad/masataka/bin
+
+	There are 7 different bin directory.
+	We want to find the executable files under them
+	To know how to operate find in specific directory
+	>> man find
+	and I can write the command like
+	find [-H] [-L] [-P] [-D debugopts] [-Olevel] [path...] [expression]
+	
+	>> find /usr/local/cs/bin /usr/lib64/qt-3.3/bin 
+	   	/u/cs/ugrad/masataka/perl5/bin
+	        /usr/local/bin /usr/bin /usr/X11R6/bin 
+			/u/cs/ugrad/masataka/bin -executable
+	, which shows all executable programs in specified directories.
+	I found out there are no executables in the
+	‘/usr/X11R6/bin'
+	'/u/cs/ugrad/masataka/bin'
+	'/u/cs/ugrad/masataka/perl5/bin'
+	so we can exclude them next time.
+
+	Since it showed too many, 
+	I need to find the way to find only one char commands
+	I can use the wildcard '?' which matches any single charcter.
+	so in the end, to specify the pattern, we can use -name option
+	(I read the man find page)
+	>> find	/usr/local/cs/bin /usr/lib64/qt-3.3/bin 
+	        /usr/local/bin /usr/bin  -executable -name '?'
+	,which shows
+		/usr/local/cs/bin/[
+		/usr/bin/X
+		/usr/bin/w
+		/usr/bin/[
+		
+
+	Now to find out what they do, I can use man command
+
+	>> man [
+	and it has statement:
+		test and [ evaluate conditional 
+		expressions using a set of rules based 
+		on the number of arguments.
+		and it is buildin bash commands
+	
+	>> man X
+	and it showed:
+		No manual entry for X
+	
+	NOTE:(Credit to TA Sneha Shankar)
+		man X doesn't show up in some of the linex servers.
+		We can use the whereis X commmand to find that out.
+				>> whereis X
+				X: /usr/bin/X
+				in my lnxsrv09.
+		If we use the lnxsrv03, 
+		it shows another place to above, which is
+				>> whereis X
+				X: /usr/bin/X /usr/share/man/man7/X.7.gz
+				in my lnxsrv03
+		It explains why I couldn't find the man X page in lnxsrv09
+	
+	Under lnxsrv03
+	>> man X
+	and it states:
+		a portable, network-transparent window system
+	
+	>> man w
+	and it states:
+		Show who is logged on and what they are doing.
+
+==============================================================================
+4. When you execute the command named by the symbolic link /usr/bin/emacs, 
+   which file actually is executed? 
+   List any shell commands you used to answer this question.
+
+	Symbolic link means a file that connects to another file.
+	To find the appropriate command to find the actual path
+	>> man -k symbolic
+	, and I found
+		readlink (1) - 
+			 print resolved symbolic links or canonical file names
+	to know detail
+	>> man readlink
+	its format should be:
+		readlink [OPTION]... FILE...
+	so
+	>> readlink /usr/bin/emacs
+	, and it shows
+		/etc/alternatives/emacs
+	
+	so /etc/alternatives/emacs is the actual file that will be executed.
+
+==============================================================================
+5. The chmod program changes permissions on a file.
+   What does the symbolic mode g+s,o-x mean, in terms of permissions?
+   
+   To know detail,
+   >> man chmod
+   , which states:
+   		change file mode bits
+	it also explained what charcters stands for
+		r - read
+		w - write
+		x - execute, or search for directory
+		X -  execute/search only if the file is a directory 
+			 or already has execute permission for some user
+		s - set user or group ID on execution
+		t - restricted deletion flag or sticky bit
+		u - the user who owns the file 
+		g - other users who are members of the file's group 
+		o - users that are in neither of the two preceding categories
+		a - all users
+	The formant is:
+		[ugoa...][[-+=][perms...]...]
+			where:
+			ugoa - controls which users' access to the
+			        file will be change
+			perms - either zero or more letters from the
+			     set rwxXst, or a single letter from the set ugo
+			+ operator - causes the selected file mode
+			  	      bits to be added to 
+			         the existing file mode bits of each file
+			- operator - causes them to be removed
+			= operator - causes them to be added and
+			   causes unmentioned bits to be removed except 
+                           that a directory's unmentioned set user 
+			   and group ID bits are not affected.
+
+	Therefore
+	g+s - set groupID on execution
+		  when users execute the file, 
+		  it gives the file group's permission (setgid)
+		  
+		 
+	o-x - remove the exection mode for others 
+	      ("users that are in neigher of u and g category.)
+
+==============================================================================
+6. What option to find lets you search for files that have been modified 
+   in the last three weeks?
+
+	>> man find
+	, and I found:
+		-mtime n
+			File's data was last modified n*24 hours ago.
+			See the  comments  for  -atime  to  understand 
+			how  rounding affects the interpretation of 
+			file status change times.
+		-atime n:
+			File  was last accessed n*24 hours ago.  
+			When find figures out how many 24-hour periods ago
+			the file was last accessed, any fractional part 
+			is ignored, so to match -atime +1, a file has to have
+			 been  accessed  at least two days ago.
+		==> we need to use 20 instead of 21 to know from 3 weeks ago
+
+		Numeric arguments can be specified as
+			 +n     for greater than n,
+			 -n     for less than n,
+			  n      for exactly n.
+		==> so we need to use -20
+
+		ex:
+			find $HOME -mtime 0
+			Search for files in your home directory
+			which have been modified 
+			in the last twenty-four hours.
+
+	Therfore:
+	>> find -mtime -20
+
+==============================================================================
+7. Use the previous answer to find all directories modified in 
+   the last three weeks. 
+   List any shell commands you used to answer this question.
+
+   >> man find
+   , and I found:
+   		-type c
+			File is of type c:
+				b      block (buffered) special
+				c      character (unbuffered) special
+				d      directory
+				p      named pipe (FIFO)
+				f      regular file
+				l      symbolic link; 
+				       this is never true if the -L option or 
+				       the -follow option is in effect,
+				s      socket
+				D      door (Solaris)
+	
+	Therefore:
+	>> find -type d -mtime -20
+	in home directory.
+
+==============================================================================
+8. Of the files in the same directory as find,
+   how many of them are symbolic links? 
+   List any shell commands you used to answer this question.
+
+   To know the direcotry that has find,
+   from No.2
+   >> which find
+   , gives:
+   		usr/bin/find
+
+   So we need to find the number of symbolic links in the usr/bin directory
+
+   To find the symbolic links,
+   from No.7
+   >> find /usr/bin -type l
+   , and it gives too many sybolic links to count.
+   so we need to know the way to count the number of new line
+   that will print by above command.
+   we need to use wc command as we learned in the lecture.
+   to count newline
+   >> man wc
+   , states:
+   		-l, --lines
+			 print the newline counts
+
+	Therefore:
+	>> find /usr/bin -type l | wc -l
+	, which gives:
+		293
+	
+	so 293 symbolic links
+==============================================================================
+9. What is the oldest regular file in the /usr/lib directory? 
+   Use the last-modified time to determine age. Include files 
+   (with names starting with ".") in your search. 
+   List any shell commands you used to answer this question.
+
+	>> man ls
+	, and I found
+		-l     use a long listing format
+		-t     sort by modification time, newest first
+		-r,    reverse order while sorting
+	
+	To see the all list, we use
+	-l option, 
+	but we want to sort by 
+	modification time since problem asking us to use the 
+	last-modified time to dertermine age, so we also use -t option.
+	
+	If we want to see the sort result with oldest first, we can also use
+	-r option
+		
+	Therefore:(under lnxsrv07)
+	>> cd /usr/lib
+	>> ls -l -t -r
+	, which shows the sorted list with oldest first
+	and to determine whether it is file or not,
+	we look at
+	drwxr-xr-x
+	if the first letter was '-', it is file.
+
+	Therefore:
+	-rwxr-xr-x   1 root root   18692 Jan 26  2014 libgpg-error.so.0.10.0
+	is the oldest file in the /usr/lib directory
+
+==============================================================================
+10. Where does the locale command get its data from? 
+	List any shell commands you used to answer this question.
+
+	>> man locale
+	, which states:
+		When  invoked  without  arguments,  
+		locale  displays  the  current  
+		locale  settings  for  each locale category (see locale(5)), 
+		based on the settings of the environment variables
+		that control the locale (see locale(7)).
+	
+	>> man 5 locale
+	, which states:
+		 locale - describes a locale definition file
+		 The  locale  definition file contains all the information
+		 that the localedef(1) command needs to convert it into
+		 the binary locale database.
+
+	>> man 7 locale
+	, which states:
+		 A  locale  is a set of language and cultural rules. 
+		 These cover aspects such as language for messages, 
+		 different character sets, lexicographic conventions, 
+		 and so on. 
+		 A program needs to be able to determine its locale 
+		 and act accordingly to be portable to different cultures.
+		 The header <locale.h> declares data types,
+		 functions and macros which are useful in this task.
+	
+	I need to know about localedef too, so
+	>> man localedef
+	, which states:
+		localedef - compile locale definition files
+		The  localedef  program  reads the indicated charmap and
+	        input files, compiles them to a binary form quickly usable
+	        by the locale functions in the C library (setlocale(3),
+	        localeconv(3), etc.), and places the output in outputpath.
+	, and also it states:
+		* If outputpath contains a slash character ('/'),
+		  it is interpreted as the name of the directory where
+		  the output definitions are to be stored. In this case,
+		  there is a separate output file for each locale category
+		   (LC_TIME, LC_NUMERIC, and so on).
+		* If the --no-archive option is used, 
+		  outputpath is the name of a subdirectory 
+		  in /usr/lib/locale where per-category compiled files
+		  are placed.
+		* Otherwise, outputpath is the name of a locale and the 
+		  compiled locale data is added to the  archive  file 
+		  /usr/lib/locale/locale-archive. 
+		  A locale archive is a memory-mapped file 
+		  which contains all the system provided locales; 
+		  it is used by all localized programs when the
+		  environment variable LOCPATH is not set.
+
+
+	Therefore, locale date gets its command from whether
+	- LC_TIME, LC_NUMERIC, etc
+	- /usr/lib/locale
+	- /usr/lib/locale/locale-archive
+	depends on the condition of outputpath stated above.
+
+==============================================================================
+11. In Emacs, what commands have sort in their name? 
+	List any Emacs commands you used to answer this question.
+
+
+	to invoke emacs
+	>> emacs
+
+	to get help
+	>> C-h
+	, which shows:
+		a PATTERN  Show commands whose name matches the PATTERN
+		  	    (a list of words or a regexp).
+			     See also the ‘apropos’ command.
+	so
+	>> C-h a sort
+	, which shows:
+			Buffer-menu-sort              M-x ... RET
+				Sort Tabulated List entries
+				      by the column at point.
+			sort-columns                  M-x ... RET
+				Sort lines in region alphabetically 
+				     by a certain range of columns.
+			sort-fields                   M-x ... RET
+				Sort lines in region lexicographically
+				      by the ARGth field of each line.
+			sort-lines                    M-x ... RET
+				Sort lines in region alphabetically;
+				 argument means descending order.
+			sort-numeric-fields           M-x ... RET
+				Sort lines in region numerically 
+				by the ARGth field of each line.
+			sort-pages                    M-x ... RET
+				Sort pages in region alphabetically;
+				 argument means descending
+				order.
+			sort-paragraphs               M-x ... RET
+				Sort paragraphs in region alphabetically;
+			        argument means descending order.
+			sort-regexp-fields            M-x ... RET
+				Sort the text in the region region
+			        lexicographically.
+			tabulated-list-col-sort       M-x ... RET
+				Sort Tabulated List entries by the column 
+				of the mouse click E.
+	(>> C-x o to move the curser to result page and moving down)	
+			tabulated-list-sort           M-x ... RET
+			 	Sort Tabulated List entries 
+				by the column at point.
+	
+==============================================================================
+12. Briefly, what do the Emacs keystrokes C-M-a through C-M-h do? 
+	Can you list their actions concisely? 
+	List any Emacs commands you used to answer this question.
+
+	>> emacs
+	>> C-h
+	, which showed:
+		k KEYS     
+		   Display the full documentation for the key sequence.
+	>> C-x C-c
+
+	so
+	>> emacs
+	>> C-h k C-M-a
+	, which states:
+		Move backward to the beginning of a defun.
+	>> C-x o
+	>> q
+
+	>> C-h k C-M-b
+	, which states:
+		Move backward across one balanced expression (sexp).
+	>> C-x o
+	>> q
+
+	>> C-h k C-M-c
+	, which states:
+		Exit from the innermost recursive edit or minibuffer.
+	>> C-x o
+	>> q
+
+	>> C-h k C-M-d
+	, which states:
+		Move forward down one level of parentheses.
+	>> C-x o
+	>> q
+
+	>> C-h k C-M-e
+	, which states:
+		Move forward to next end of defun.
+	>> C-x o
+	>> q
+
+	>> C-h k C-M-f
+	, which states:
+		Move forward across one balanced expression (sexp).
+	>> C-x o
+	>> q
+
+	>> C-h k C-M-g
+	, which states:
+		It is bound to C-g.
+		Signal a ‘quit’ condition.
+	>> C-x o
+	>> q
+
+	>> C-h k C-M-h
+	, which states:
+		Put mark at end of this defun, point at beginning.
+	>> C-x o
+	>> q
+
+==============================================================================
+13. In more detail, what does the Emacs keystroke C-g do? 
+	List any Emacs commands you used to answer this question.
+
+	>> emacs
+	>> C-h k C-g
+	, which states:
+		C-g runs the command keyboard-quit (found in global-map), 
+		which is an interactive compiled Lisp function in ‘simple.el’.
+		Signal a ‘quit’ condition.
+		During execution of Lisp code, 
+		this character causes a quit directly.
+		At top-level, as an editor command, this simply beeps.
+	
+	Simply, it can quit from whatever you are doing including during
+	the exectuion of Lisp code.
+
+==============================================================================
+14. What does the Emacs yank function do? 
+	List any Emacs commands you used to answer this question.
+
+	>> emacs
+	>> C-h
+	, and I found:
+		f FUNCTION  Display documentation for the given function.
+	>> C-x C-c
+
+	therefore,
+	>> C-h f yank
+	, which states:
+		yank is an interactive compiled Lisp function in ‘simple.el’.
+	In short, Reinsert ("paste") the last stretch of killed text.
+		More precisely, reinsert the most recent kill, which is the
+		stretch of killed text most recently killed OR yanked. 
+	        Put point at the end, and set mark at the beginning 
+		without activating it.
+		With just C-u as argument, put point at beginning,
+	        and mark at end.
+		With argument N, reinsert the Nth most recent kill.
+		It is bound to C-y.
+	
+
+==============================================================================
+15. When looking at the directory /usr/bin, 
+	what's the difference between the output of the ls -l command, 
+	and the directory listing of the Emacs dired command? 
+	List any shell or Emacs commands you used to answer this question
+
+	>> cd /usr/bin
+	>> ls -l
+	It shows the long format of all files in that directory such as
+		total 301660
+		-rwxr-xr-x    1 root root       41496 Jun 30  2016 '['
+		-rwxr-xr-x    1 root root      107856 Mar  2  2017  a2p
+		-rwxr-xr-x    1 root root       52640 Oct  3 06:37  ab
+		
+
+	>> cd
+	>> emacs
+	>> C-h f dired
+	, which states:
+		It is bound to C-x d, <menu-bar> <file> <dired>.
+	>> C-x o
+	>> q
+	>> C-x d
+	>> /usr/bin (it had ~/ first, so I deleted and typed left path)
+	It also shows the long format of all files in that directorys
+	/usr/bin:
+		total used in directory 301736 available 13401140
+		dr-xr-xr-x.   2 root root       69632 Dec 28 13:15 .
+		drwxr-xr-x.  15 root root        4096 Nov 18  2016 ..
+		-rwxr-xr-x    1 root root       41496 Jun 30  2016 [
+		-rwxr-xr-x    1 root root      107856 Mar  2  2017 a2p
+		-rwxr-xr-x    1 root root       52640 Oct  3 06:37 ab
+
+
+	Therefore, the difference between emacs dired command and ls -l is
+	dired command showed
+		dr-xr-xr-x.   2 root root       69632 Dec 28 13:15 .
+		drwxr-xr-x.  15 root root        4096 Nov 18  2016 ..
+	which is current directry and parent directly, respectively.
+	while ls -l didn't show them.
+	Also, emacs command showed
+	total used in directory 301736 available 13401140 
+	while ls -l showed
+	total 301660.
+
+==============================================================================
+
+
+

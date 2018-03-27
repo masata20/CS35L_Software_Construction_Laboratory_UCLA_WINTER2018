@@ -1,0 +1,248 @@
+
+Name: Masataka Mori
+
+Laboratory: Installing a small change to a big package
+
+I'll work this lab under the  ~/Documents/cs35l/lab3 in lnxsrv07
+===============================================================================
+1. Download the Coreutils7.6
+
+   >> wget ftp://ftp.gnu.org/gnu/coreutils/coreutils-7.6.tar.gz
+===============================================================================
+2. Untar the file
+
+   >> man tar
+   , which shows:
+   	  -x, --extract, --get
+              extract files from an archive
+	  -z, --gzip
+              filter the archive through gzip
+	  -v, --verbose
+              verbosely list files processed
+	  -f, --file=ARCHIVE
+              use archive file or device ARCHIVE
+   
+   >> tar -xzvf coreutils-7.6.tar.gz
+===============================================================================
+3. Create the directory to install the coreutil7.6
+
+   >> mkdir coreutils_install
+===============================================================================
+4. Guess valuses for system-dependend variables and create Makefiles
+
+   Since we want to install the coreutils-7.6, we need to specify the
+   path(the directory we created in step 3) when run the configure files.
+
+   By looking at the file 'configure' in the coreutils-7.6 directory,
+   which was created by untar the tarball file, it states:
+   		 Installation directories:    
+ 		   --prefix=PREFIX install architecture-independent 
+						files in PREFIX
+                           [$ac_default_prefix]
+
+   So use following command
+
+	>> ./configure  \
+	     --prefix=/u/cs/ugrad/masataka/Documents/cs35l/lab3
+							/coreutils_install
+===============================================================================
+5. Compile and install
+
+   There is a Makefile.in in the coreutils_install, so
+   we can use the make command to compile the all files at once
+   By looking at the Makefile.in, the make command goes to 'all:' target
+   and it calls 'all-recursive' target, which allows to compile every files
+   recursively.
+   >> make
+
+   To install the compiled files into the specified dicrectory,
+   we can specify the target 'install'
+   we can find the 'install:' target in the Makefile.in.
+   >> make install
+
+   Now, if you check the created directory coreutils_install
+   >> cd coreutils_install
+   >> ls
+   we can see
+   	  bin  lib  share
+===============================================================================
+6. Reproduce the bug with unmodified version of coreutils.
+
+   A. Check the locale
+   	  >> locale
+
+	  then, it showed that all of them is set as "en_US.UTF-8",
+	  so we don't need to export manually.
+
+   B. Try ls command
+
+   	  Under the coreutils_install directory,
+	  >> ls -l /bin/bash
+	  , which showed
+	  	-rwxr-xr-x 1 root root 960632 Aug  3  2017 /bin/bash
+
+	  It didn't show the bug which we wanted.
+	  It is because we used the ls command in our own bin directory,
+	  and not the coreutil version.
+	  To propery use the command in coreutils
+	  we need to specifiy the location of ls
+	  Under the coreutils_install directory
+
+	  >> ./bin/ls  -l /bin/bash
+	  , which showed:
+	  	-rwxr-xr-x 1 root root 960632 2017-08-03 06:36 /bin/bash
+
+	  Now, we successfully reproduced the bug.
+===============================================================================
+7. Apply the patch in the orignal directory (coreutils-7.6)
+
+   A. Create the patch file
+   	  Under the coreutils-7.6 directory
+   	   >> touch patch
+	   >> emacs patch
+
+	   Go to the website
+	   http://lists.gnu.org/archive/html/bug-coreutils
+						/2009-09/msg00410.html
+	   and copy the lines start from
+	   diff --git a/src/ls.c b/src/ls.c
+	   and end with
+	   /* Note we leave %5b etc. alone so user widths/flags are honored.*/
+	  
+   	   and paste to the patch file under the coreutils-7.6 directory
+	   by using emacs
+
+   B. Apply the patch
+
+   	  To apply the patch, we need to use patch command
+
+	  >> man patch
+	  , which shows:
+	  	  patch - apply a diff file to an original
+
+		  patch -pnum < patchfile
+
+		  -pnum: Strip the smallest prefix containing num leading
+		         slashes from each file name found in the patch file
+
+	  By looking at the patch file, the lines we want to delete 
+	  is starting from the '-', so we need to use option -p1
+
+	  Under coreutils7.6 directory,
+	  >> patch -p1 < patch
+	  , which showed:
+	  	patching file src/ls.c
+	  	Hunk #1 succeeded at 2013 (offset -1 lines).
+	  	patch unexpectedly ends in middle of line
+	  	Hunk #2 succeeded at 2028 with fuzz 1 (offset -1 lines)
+
+	  We can see if it is successfully applied or not by going
+	  src directory under the coreutil7.6 directory and
+	  >> emacs ls.c
+	  Since in patch file, it states that it modifies around the line
+	  2014 and 2030, we can jump to there and check.
+	  The patch was successfully applied.
+
+===============================================================================
+8. Check if the bug is fixed or not.
+
+   A. Recompile
+   	  Under the coreutils-7.6 directory, 
+          to compile the new version of ls.c.
+  	  Again, we can just use the make command to compile all at once.
+  	  By looking at the Makefile.in, the make command goes to 'all:' target
+   	  and it calls 'all-recursive' target, 
+	  which allows to compile every files recursively.
+
+	  >> make
+
+    B. Run the ls command
+
+	   To use the ls command which is fixed, again, we need to specify the
+	   location clearly.
+
+	   Under the coreutils-7.6.
+	   >> ./src/ls -l /bin/bash
+	   , which shows:
+	   	 -rwxr-xr-x 1 root root 960632 Aug  3  2017 /bin/bash
+
+		 Clearly bug is fixed!!!!
+
+	   To see the differnce clearly, 
+	   we can run the unmodified version of ls.
+	   Under the coreutils-7.6, (we don't need to move around dir)
+	   >> ../coreutils_install/bin/ls -l /bin/bash
+	   , which shows:
+	   	   -rwxr-xr-x 1 root root 960632 2017-08-03 06:36 /bin/bash
+
+		 Since we didn't apply the patch for installed version,
+		 it still shows the bug.
+===============================================================================
+9. Create a file that recently modifed and at least year old
+
+   A. Create the file which is for recenctly modifed.
+
+   	  Under the directory ~/Documents/cs35l/lab3/
+	  >> touch new_file
+
+   B. Create a file artficially marked as being a year old
+
+   	  >> man touch
+	  , which states:
+	  	-t  time
+		Use the specified time instead of the current time.
+		The option-argument shall be a decimal number of the form:
+		[[CC]YY]MMDDhhmm[.SS]
+			where each two digits represents the following:
+ 			 MM
+			 The month of the year [01,12].
+			 DD
+			 The day of the month [01,31].
+			 hh
+			 The hour of the day [00,23].
+			 mm
+			 The minute of the hour [00,59].
+			 CC
+			 The first two digits of the year (the century).
+			 YY
+			 The second two digits of the year.
+			 SS
+			 The second of the minute [00,60].
+
+     Let's make the date to 2017/01/01 12:45
+
+	 >> touch -t 1701011245 old_file
+
+===============================================================================
+10. Test on new_file and old_file by using orignal and updated ls.
+
+	Under the coreutils-7.6 directory
+
+	A. Use updated version
+
+	   >>./src/ls -l ../new_file
+	   ,which showed:
+	     -rw-r--r-- 1 masataka csugrad 0 Feb  3 12:45 ../new_file
+	
+	   >>./src/ls -l ../old_file
+	   , which showed:
+	   	 -rw-r--r-- 1 masataka csugrad 0 Jan  1  2017 ../old_file
+
+
+	B. Use bug version
+
+	   >> ../coreutils_install/bin/ls -l ../new_file
+	   , which showed:
+	   	 -rw-r--r-- 1 masataka csugrad 0 2018-02-03 12:45 ../new_file
+
+	   >> ../coreutils_install/bin/ls -l ../old_file
+	   , which showed
+	   	 -rw-r--r-- 1 masataka csugrad 0 2017-01-01 12:45 ../old_file
+
+=> For the old_file which is modifed at least year ago, it doen't shows
+   the time of modifed(HH:MM) in updated version of ls and only shows a year,
+   while the bug version shows both year and HH:MM.
+=> For the new_file, the updated version of ls doesn't show the year of
+   modified and only HH:MM,
+   while the bug version shows both year and HH:MM
+===============================================================================
