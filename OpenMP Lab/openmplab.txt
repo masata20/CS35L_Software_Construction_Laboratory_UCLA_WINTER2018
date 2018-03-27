@@ -1,0 +1,1238 @@
+
+Name: Masataka Mori
+
+OpenMP Lab
+
+Purpose:
+	Use OpenMP to make program run faster.
+
+Preknowledge:
+	
+	OpenMP:
+		Open Multiprocessing:
+			It is an API(application programming interface) which support 
+			multi-platform shared memory multiprocssing programming in C.
+
+		An implimentation of multithreading which is the way to parallelize
+		that a main thread(or parent thread) forks a specified number of child
+		threads and let the system divides a task to each of them.
+
+Preparation
+
+	1. Run the sequential code
+
+		$ make clean
+		$ make seq
+		
+		
+		, which outputs
+			gcc -o seq  -O3 filter.c main.c func.c util.c -lm
+			
+
+	2. Check the function time and total time
+
+		$ ./seq
+
+		, which output
+			FUNC TIME : 0.463316
+			TOTAL TIME : 2.398765
+
+	
+		===> our purpose is to speed up the FUNC TIME
+			 by factor of 3.5x speedup.
+			 So what we want is 
+
+			 0.463316 / 3.5 = 0.132376
+	
+	3. Determine what to speed up
+
+		-> do profiling!
+			
+			use gprof in this case
+		$ make clean
+		$ make seq GPROF=1
+			gcc -o seq  -O2 -pg filter.c main.c func.c util.c -lm
+
+		$ ./seq
+			FUNC TIME : 0.547252
+			TOTAL TIME : 2.674912
+
+		$ gprof seq | less
+			
+			
+		,which output
+			
+			Flat profile:
+
+			Each sample counts as 0.01 seconds.
+			%   cumulative   self              self     total           
+			time   seconds   seconds    calls  ms/call  ms/call  name    
+			64.15      0.41     0.41       15    27.37    29.27  func1
+			23.47      0.56     0.15  5177344     0.00     0.00  rand2
+			 4.69      0.59     0.03                             sequence
+			 3.13      0.61     0.02   491520     0.00     0.00  findIndexBin
+			 1.56      0.62     0.01        1    10.01   131.69  addSeed
+		 	 1.56      0.63     0.01        1    10.01    10.01  imdilateDisk
+			 1.56      0.64     0.01                             filter
+		 	 0.00      0.64     0.00   983042     0.00     0.00  round
+		 	 0.00      0.64     0.00       16     0.00     0.00  dilateMatrix
+			 0.00      0.64     0.00       15     0.00     0.00  func2
+			 0.00      0.64     0.00       15     0.00     0.00  func3
+			 0.00      0.64     0.00       15     0.00     0.00  func4
+			 0.00      0.64     0.00       15     0.00     1.34  func5
+			 0.00      0.64     0.00       15     0.00     0.00  rand1
+			 0.00      0.64     0.00        2     0.00     0.00  get_time
+		 	 0.00      0.64     0.00        1     0.00     0.00  elapsed_time
+			 0.00      0.64     0.00        1     0.00     0.00  fillMatrix
+			 0.00      0.64     0.00        1     0.00     0.00  func0
+			 0.00      0.64     0.00        1     0.00     0.00  getNeighbors
+
+			%         the percentage of the total running time of the
+			time       program used by this function.
+
+			cumulative a running sum of the number of seconds accounted
+			seconds   for by this function and those listed above it.
+
+			self      the number of seconds accounted for by this
+			seconds    function alone.  This is the major sort for this
+			listing.
+
+			calls      the number of times this function was invoked, if
+			this function is profiled, else blank.
+
+			self      the average number of milliseconds spent in this
+			ms/call    function per call, if this function is profiled,
+			else blank.
+
+			total     the average number of milliseconds spent in this
+			ms/call    function and its descendents per call, if this 
+			function is profiled, else blank.
+
+			name       the name of the function.  This is the minor sort
+			for this listing. The index shows the location of
+			the function in the gprof listing. If the index is
+			in parenthesis it shows where it would appear in
+
+
+						Call graph (explanation follows)
+
+
+			granularity: each sample hit covers 2 byte(s) for 1.56% of 0.64 seconds
+
+			index % time    self  children    called     name
+			<spontaneous>
+			[1]     73.2    0.01    0.46                 filter [1]
+			0.41    0.03      15/15          func1 [2]
+			0.00    0.02      15/15          func5 [7]
+			0.00    0.00      15/15          func2 [11]
+			0.00    0.00      15/15          func3 [12]
+			0.00    0.00      15/15          rand1 [14]
+			0.00    0.00      15/15          func4 [13]
+			0.00    0.00       2/2           get_time [15]
+			0.00    0.00       2/983042      round [9]
+			0.00    0.00       1/1           fillMatrix [17]
+			0.00    0.00       1/1           getNeighbors [19]
+			0.00    0.00       1/1           func0 [18]
+			0.00    0.00       1/1           elapsed_time [16]
+			-----------------------------------------------
+			0.41    0.03      15/15          filter [1]
+			[2]     68.5    0.41    0.03      15         func1 [2]
+			0.03    0.00  983040/5177344     rand2 [4]
+			0.00    0.00  983040/983042      round [9]
+			-----------------------------------------------
+			<spontaneous>
+			[3]     26.8    0.03    0.14                 sequence [3]
+			0.01    0.12       1/1           addSeed [5]
+			0.01    0.00       1/1           imdilateDisk [8]
+			-----------------------------------------------
+			0.03    0.00  983040/5177344     func1 [2]
+			0.12    0.00 4194304/5177344     addSeed [5]
+			[4]     23.4    0.15    0.00 5177344         rand2 [4]
+			-----------------------------------------------
+			0.01    0.12       1/1           sequence [3]
+			[5]     20.5    0.01    0.12       1         addSeed [5]
+			0.12    0.00 4194304/5177344     rand2 [4]
+			-----------------------------------------------
+			0.02    0.00  491520/491520      func5 [7]
+			[6]      3.1    0.02    0.00  491520         findIndexBin [6]
+			-----------------------------------------------
+			0.00    0.02      15/15          filter [1]
+			[7]      3.1    0.00    0.02      15         func5 [7]
+			0.02    0.00  491520/491520      findIndexBin [6]
+			-----------------------------------------------
+			0.01    0.00       1/1           sequence [3]
+			[8]      1.6    0.01    0.00       1         imdilateDisk [8]
+			0.00    0.00      16/16          dilateMatrix [10]
+			-----------------------------------------------
+			-----------------------------------------------
+			0.00    0.00       2/983042      filter [1]
+			0.00    0.00  983040/983042      func1 [2]
+			[9]      0.0    0.00    0.00  983042         round [9]
+			-----------------------------------------------
+			0.00    0.00      16/16          imdilateDisk [8]
+			[10]     0.0    0.00    0.00      16         dilateMatrix [10]
+			-----------------------------------------------
+			0.00    0.00      15/15          filter [1]
+			[11]     0.0    0.00    0.00      15         func2 [11]
+			-----------------------------------------------
+			0.00    0.00      15/15          filter [1]
+			[12]     0.0    0.00    0.00      15         func3 [12]
+			-----------------------------------------------
+			0.00    0.00      15/15          filter [1]
+			[13]     0.0    0.00    0.00      15         func4 [13]
+			-----------------------------------------------
+			0.00    0.00      15/15          filter [1]
+			[14]     0.0    0.00    0.00      15         rand1 [14]
+			-----------------------------------------------
+			0.00    0.00       2/2           filter [1]
+			[15]     0.0    0.00    0.00       2         get_time [15]
+			-----------------------------------------------
+			0.00    0.00       1/1           filter [1]
+			[16]     0.0    0.00    0.00       1         elapsed_time [16]
+			-----------------------------------------------
+			0.00    0.00       1/1           filter [1]
+			[17]     0.0    0.00    0.00       1         fillMatrix [17]
+			-----------------------------------------------
+			0.00    0.00       1/1           filter [1]
+			[18]     0.0    0.00    0.00       1         func0 [18]
+			-----------------------------------------------
+			0.00    0.00       1/1           filter [1]
+			[19]     0.0    0.00    0.00       1         getNeighbors [19]
+			-----------------------------------------------
+
+			This table describes the call tree of the program, and was sorted by
+			the total amount of time spent in each function and its children.
+
+			Each entry in this table consists of several lines.  The line with the
+			index number at the left hand margin lists the current function.
+			The lines above it list the functions that called this function,
+			and the lines below it list the functions this one called.
+			This line lists:
+			index      A unique number given to each element of the table.
+						Index numbers are sorted numerically.
+						The index number is printed next to every function name so
+						it is easier to look up where the function is in the table.
+
+			% time     This is the percentage of the `total' time that was spent
+			in this function and its children.  Note that due to
+			different viewpoints, functions excluded by options, etc,
+			these numbers will NOT add up to 100%.
+
+			self       This is the total amount of time spent in this function.
+
+			children   This is the total amount of time propagated into this
+			function by its children.
+
+			called     This is the number of times the function was called.
+			If the function called itself recursively, the number
+			only includes non-recursive calls, and is followed by
+			a `+' and the number of recursive calls.
+
+			name       The name of the current function.  The index number is
+			printed after it.  If the function is a member of a
+			cycle, the cycle number is printed between the
+			function's name and the index number.
+
+
+			For the function's parents, the fields have the following meanings:
+
+			self       This is the amount of time that was propagated directly
+			from the function into this parent.
+
+			children   This is the amount of time that was propagated from
+			the function's children into this parent.
+
+			called     This is the number of times this parent called the
+			function `/' the total number of times the function
+			was called.  Recursive calls to the function are not
+			included in the number after the `/'.
+
+			name       This is the name of the parent.  The parent's index
+			number is printed after it.  If the parent is a
+			member of a cycle, the cycle number is printed between
+			the name and the index number.
+
+			If the parents of the function cannot be determined, the word
+			`<spontaneous>' is printed in the `name' field, and all the other
+			fields are blank.
+
+			For the function's children, the fields have the following meanings:
+
+			For the function's children, the fields have the following meanings:
+
+			self       This is the amount of time that was propagated directly
+			from the child into the function.
+
+			children   This is the amount of time that was propagated from the
+			child's children to the function.
+
+			called     This is the number of times the function called
+			this child `/' the total number of times the child
+			was called.  Recursive calls by the child are not
+			listed in the number after the `/'.
+
+			name       This is the name of the child.  The child's index
+			number is printed after it.  If the child is a
+			member of a cycle, the cycle number is printed
+			between the name and the index number.
+
+			If there are any cycles (circles) in the call graph, there is an
+			entry for the cycle-as-a-whole.  This entry shows who called the
+			cycle (as parents) and the members of the cycle (as children.)
+			The `+' recursive calls entry shows the number of function calls that
+			were internal to the cycle, and the calls entry for each member shows,
+			for that member, how many times it was called from other members of
+			the cycle.
+
+
+			Index by function name
+
+			[5] addSeed                 [2] func1                   [8] imdilateDisk
+			[10] dilateMatrix           [11] func2                  [14] rand1
+			[16] elapsed_time           [12] func3                   [4] rand2
+			[17] fillMatrix             [13] func4                   [9] round
+			[1] filter                  [7] func5                   [3] sequence
+			[6] findIndexBin           [19] getNeighbors
+			[18] func0                  [15] get_time
+(END)
+
+
+=======================================================================================
+Let's try to speed up!!!
+======================================================================================
+
+1. By looking at above profiling
+
+	Each sample counts as 0.01 seconds.
+		%   cumulative   self              self     total           
+		time   seconds   seconds    calls  ms/call  ms/call  name    
+		64.15      0.41     0.41       15    27.37    29.27  func1
+
+	===> the function which takes the most of time is func1
+		 so let's try to speed up func1 first
+
+2. Examine the func1. 
+
+	A. Determine what are passed throught arguments.
+
+		func1 has arguments:
+			int *seed
+			int *array
+			double *arrayX
+			double *arrayY
+			double *probability
+			double *objxy
+			int *index
+			int Ones
+			int iter
+			int X
+			int Y
+			int Z
+			int n
+
+		Let's find out where called this function.
+
+		By looking at main.c, there is no line who called func1.
+		But there is a line
+		filter(array, X, Y, Z, seed, N, ofp);
+		
+		the filter function is in the filter.c, so let's take a look at that.
+		In filter.c I found the line
+		func1(seed, array, arrayX, arrayY, probability, objxy, index, Ones, i, X, Y, Z, N); 
+		
+		these are the arguments, which passed to func1. Let's determine one by one
+
+			seed: (int *seed)
+				This is passed from main, so look at main.c, and I found
+				int *seed = (int *)malloc(sizeof(int)*N);
+					seed is the pointer to the array of integer data type where it is
+					dynamically allocate.
+					The size of array is
+					sizeof(int)*N = 4bytes * N
+								  = 4 * 32768 = 131072 bytes
+					
+			N: int N
+				this is also passed from main.c
+				N = 32768
+
+			array: int*array
+				this is also passed from main.c
+				int *array = (int *)malloc(sizeof(int)*X*Y*Z);
+					,which means that array is a pointer to the array of integer data type.
+					The size of array is
+					sizeof(int)*X*Y*Z = 4bytes*X*Y*Z
+									  = 4*512*512*16 = 16777216
+
+			X: int X
+				this is also passed from main.c
+				X = 512
+			Y: int Y
+				this is also passed from main.c
+				Y = 512
+			Z: int Z
+				this is also passed from main.c
+				Z = 16
+
+			arrayX: double *arrayX
+				this is dynamically allocated at filter.c
+				double *arrayX = (double *)malloc(sizeof(double)*N); 
+				, which is the pointer to the array of double data type.
+				The size of array is 
+				sizeof(double)*N = 8bytes * N
+				                 = 8 * 32768 = 262144 bytes
+
+			arrayY: double *arrayY
+				this is dynamically allocated at filter.c
+				double *arrayY = (double *)malloc(sizeof(double)*N); 
+				, which is pointer to the array of doble data type.
+				The size of array is 
+				sizeof(double)*N = 8bytes * N
+				                 = 8 * 32768 = 262144 bytes
+
+			
+			probability: double *probability
+				this is declared at filter.c
+				double * probability = (double *)malloc(sizeof(double)*N);
+				, which is pointer to the array of double data type.
+				The size of array is 
+				sizeof(double)*N = 8bytes * N
+				                 = 8 * 32768 = 262144 bytes
+
+			objxy: double *objxy
+				this is declared at filter.c
+				double * objxy = (double *)malloc(Ones*2*sizeof(double));
+				, which is pointer to the array of double data type.
+				The size of array is
+				Ones*2*sizeof(double) = Ones*2*8bytes
+									  =
+
+			Ones: int Ones
+				this is declared and modfied at fileter.c
+				int Ones = 0;
+				int x, y;
+				for(x = 0; x < diameter; x++){
+					 for(y = 0; y < diameter; y++){
+					 	if(radiusMatrix[x*diameter + y] == 1)
+						 Ones++; 
+					 }
+				}
+					
+			
+			index: int *index
+				this is declred at filter.c
+				int * index = (int*)malloc(sizeof(int)*Ones*N); 
+				,which means pointer to the array of integer data type.
+				The size of array is
+				sizeof(int)*Ones*N = 4bytes*Ones*32768
+								   = 131072*Ones
+
+			i or iter: int iter
+				this is declared at filter.c
+				int i, j;
+				for(i = 1; i < Z; i++) { 
+				, so possible value of iter which is passed to func1 is
+				1 to Z-1, which is
+				1 to 15
+
+		=> now we know the some variable that are used in the func1.
+		   To speed up the function, generally, what we need to focus on is the loop.
+		   There are two loops in the function. Let's change them to speed up!!
+
+
+		Technique to speed up the loop:
+			-code motion
+			-eliminate function call in the loop
+			-eliminate unneeded memory reference
+			-loop unrolling 
+				- k by 1 unrolling: k elements at one loop
+				- k by k unrolling: use k accumulators
+			-reassociation
+
+
+	B. Speed up the first loop 
+	
+		for(i = 0; i < n; i++){
+			arrayX[i] += 1 + 5*rand2(seed, i);
+			arrayY[i] += -2 + 2*rand2(seed, i);
+		}
+
+		From above, we know 
+		n = N = 32768
+		arrayX : array of double with size 8 * 32768 = 262144 bytes
+		arrayY : array of double with size 8 * 32768 = 262144 bytes
+		seed   : array of integer with size 4 * 32768 = 131072 bytes
+
+		rand2 function: double rand2(int * seed, int index)
+			It is in the util.c file says,
+			 random number generator
+		 
+		1. Check if the code inside is parallizable or not.
+
+			Notice that there is no data dependencies for each iteration
+			meaning that the next iteration doesn't need to wait for the
+			previoius iteration.
+			So we can divide the each iteration with some separted threads.
+
+		2. Let many threads to work on the loop
+			
+			For for loop we use this to separte work on each threads
+			 
+			 #pragma omp parallel for num_threads(??)
+
+			 	in ??, we can put the positive integer number which
+				indicates the number of threads to work on the loop
+			 
+			 How many threads are best for this case?
+			 	In multithreads, the OS decides to which thread can use the core in the cpu.
+				Meaning, while the thread using the core, the others have to wait until
+				the OS invoke context swith can pass the core to them.
+				From the book, we know that context switch is expensive instruction.
+				Therefore, assuming that our lnxsrv09 has 4 cores, I'll divided the work of loop
+				with 4 threads, since in that case, we don't need to worry about context switch
+
+				#pragma omp parallel for num_threads(4)
+
+		3. Caution to the memory share with threads
+			
+			Remember that multithreads will share its varibles with other threads,
+			so we need to careful about this
+			
+			For openMP, 
+			- By default, a variable declared inside of a parallel block is private to each block
+			- By default, a variable declared outside of a parallel block is shared among all of 
+			  the threads of a parallel block that accesses that variable
+			- A variable within a parallel block can be made private to each thread by using the “private” keyword
+				(From TA Yuchen's slide)
+
+			In this case, we didn't declared variable inside the loop, but integer i.
+			For each iteration need to have each own i, so we need to put
+			private(i).
+			
+			What about other variables?
+				arrayX[i] and arrayY[i]:
+					at first look, it looks like we need to make it private to 
+					since the inside of each array will be modify that for each iteration by each threads.
+					However, since we make i to private, so there will be never occur that
+					the threads will modify the same element of these array.
+					Also, we don't use the modified element in future iteration, so 
+					we don't need to make it private.
+
+		4. What it looks like in the code
+			
+			Above, we decide how many threads we use, and what to make private.
+			Our C code will look like this
+
+			#pragma omp parallel for num_threads(4) private(i)
+			for(i = 0; i < n; i++){
+				arrayX[i] += 1 + 5*rand2(seed, i);
+				arrayY[i] += -2 + 2*rand2(seed, i);
+			}
+
+		5. Test it
+			To use openMP, we need to compile
+				$ make clean
+				$ make omp 
+				$ ./omp
+				
+				,which outputs
+					FUNC TIME : 0.379970
+					TOTAL TIME : 2.501926
+
+				So we successed to speed up by modifying the first loop.
+				But we need to speed up about 3.5x from the original!
+				Let's examine the next loop in func1.
+
+
+	C. Speed up the second loop
+		
+		for(i = 0; i<n; i++){
+			 for(j = 0; j < Ones; j++){
+			 	index_X = round(arrayX[i]) + objxy[j*2 + 1];
+				index_Y = round(arrayY[i]) + objxy[j*2];
+				index[i*Ones + j] = fabs(index_X*Y*Z + index_Y*Z + iter);
+				if(index[i*Ones + j] >= max_size)
+					 index[i*Ones + j] = 0;
+			  }
+			 
+			 probability[i] = 0;
+
+			 for(j = 0; j < Ones; j++) {
+			 	 probability[i] += (pow((array[index[i*Ones + j]] - 100),2) -
+				                   pow((array[index[i*Ones + j]]-228),2))/50.0;
+			 }
+
+			 probability[i] = probability[i]/((double) Ones);
+		}
+
+		From above, we know 
+		n = N = 32768
+		arrayX : array of double with size 8 * 32768 = 262144 bytes
+		arrayY : array of double with size 8 * 32768 = 262144 bytes
+		objxy  : array of double with size Ones*2*8bytes
+		index_X: declared in the func1 as integer
+		index_Y: declared in the func1 as integer
+		index  : array of int with size 131072 * Ones
+		probability: array of double with size 8 * 32768 = 262144 bytes
+
+		Functions:
+			round(): double round(double value)
+				in the util.c, which says
+				return rounded value
+			fabs():
+				in the math.h
+				returns the absolute value of double data argument
+
+		There are two inner loops. I call the first one as loopA and the second one as loopB
+ 
+		1. Check if the code inside is parallizable or not.
+
+			LoopA:
+				Is there data dependencies between each iteration?
+				-> No, at first glance there are some array reference with
+				   i and some arithmetic operation, so it might look like can affect the
+				   future array elements in the iteration.
+				   However, like I explained above, I'll make i and j private, and 
+				   so we don't share each elements of array between threads, so it'll be fine.
+				   Therefore, it is parallizable.
+
+		 	LoopB:
+				This is also parallizable between threads since each iteration won't affect
+				each other because I'll make i and j private, so each itration has unique 
+				index reference for array.
+
+			Outer Loop:
+				since both loops ara parallizable and, the arithmetic operation in outer loop
+				won't affect other iterations;thereore, it is parallizable.
+				
+		2. How many threads shoud work on this loop?
+			
+			by same reason as the first loop we examined, I pick 4 threads
+
+			#pragma omp parallel for num_threads(4)
+
+		3. Caution to the memory share with threads
+
+			As I mentioned above, I'll make i and j private, so
+			private(i,j).
+
+
+			The variables which change during one itreation is
+			index_X: declared in the func1 as integer
+			index_Y: declared in the func1 as integer
+			index  : array of int with size 131072 * Ones
+			probability: array of double with size 8 * 32768 = 262
+
+			Similar reason as first loop as above, we don't need to worry about
+			referencing array, so only variables, we need to care is
+			index_X & index_Y.
+			Since this is declared at outside of loop, it will be shared for each threads.
+			However, we use those in here
+				index[i*Ones + j] = fabs(index_X*Y*Z + index_Y*Z + iter);
+			so we don't want threads to share those variables, otherwise they will mix up
+			the value inside.
+			so we need to add
+			private(index_X, index_Y).
+
+		4. What it looks like in the code
+			
+			Above, we decide how many threads we use, and what to make private.
+			Our C code will look like this
+
+			#pragma omp parallel for num_threads(4) private(i,j,index_X,index_Y)
+			for(i = 0; i<n; i++){
+				for(j = 0; j < Ones; j++){
+				...
+
+		5. Test it
+			To use openMP, we need to compile
+				$ make clean
+				$ make omp 
+				$ ./omp
+				
+				,which outputs
+					FUNC TIME : 0.161792
+					TOTAL TIME : 2.305143
+
+					Original Time:      0.463316
+					First loop Modifed: 0.379970 
+
+					We improvde so much Better!!!!!
+					But, wait, we cannot improve this loop more??
+					Yes, we can!!!
+					There were many place where we can do one of below:
+						-code motion
+						-eliminate function call in the loop
+						-eliminate unneeded memory reference
+						-loop unrolling 
+							- k by 1 unrolling: k elements at one loop
+							- k by k unrolling: use k accumulators
+						-reassociation
+
+
+
+		6. Apply the techique above!! 
+			
+			loopA: how many iteration? 0 to Ones iterations.
+
+				index_X = round(arrayX[i]) + objxy[j*2 + 1];
+				index_Y = round(arrayY[i]) + objxy[j*2];
+				index[i*Ones + j] = fabs(index_X*Y*Z + index_Y*Z + iter);
+				if(index[i*Ones + j] >= max_size)
+					index[i*Ones + j] = 0;
+			
+				a).
+
+					For first line, we call the function round(), and notice that
+					the argument we use is only arrayX[i] & arrayY[i]
+					and i DOESN'T CHANGE in this loop.
+					So we unnecessarily call the function round Ones times.
+					
+					let's call that outside of loopA!
+					recall the round function returns double, so I made
+					outside of loopA:
+						double rounded_X = round(arrayX[i]);
+						double rounded_Y = round(arrayY[i]);
+					Inside of loopA:
+						index_X = rounded_X + objxy[j*2 + 1];
+						index_Y = rounded_Y + objxy[j*2];
+					
+					Since we declare them inside of outer loop
+					each thread will have own rounded_X and rounded_Y
+					so we don't need to make it private.
+
+						=> Test:
+							FUNC TIME : 0.161452
+							TOTAL TIME : 2.460643
+
+							Improved a little bit!!
+				b).
+					At line 3,
+					fabs(index_X*Y*Z + index_Y*Z + iter);
+
+					we are doing unnecessarily doint Y*Z even though they are constant.
+					Let's move it to outside of "outerloop"
+				
+					outside of outer loop:
+						int Y_times_Z = Y*Z;
+
+					inside of loopA:
+						fabs(index_X*Y_times_Z + index_Y*Z + iter);
+					
+					Since we don't modify Y_times_Z in the loop, we don't need to make it
+					private.
+
+						=> Test:
+							 TIME : 0.160924
+							 TOTAL TIME : 2.356446
+							
+							Improved a little bit!!
+
+			LoopB: 0 to Ones iteration
+				probability[i] += (pow((array[index[i*Ones + j]] - 100),2) -
+										pow((array[index[i*Ones + j]]-228),2))/50.0;
+
+				Notice that we unnecessarily doing memory reference even though
+				privability[i] won't change during iteration in loopB.
+				Let's make accumrator.
+				Outside of loopB:
+					double prob_i = probability[i];
+
+				inside of loopB:
+					prob_i += (pow((array[index[i*Ones + j]] - 100),2) -
+										pow((array[index[i*Ones + j]]-228),2))/50.0;
+	
+				
+				outside of loopB(after loopB)
+					probability[i] = prob_i/((double) Ones);
+
+				Since it is declared inside of outer loop, we don't need to make it
+				private.
+
+					=> Test:
+						FUNC TIME : 0.160686
+						TOTAL TIME : 2.509494
+
+						Mmm, not that much...
+
+			Outer Loop: after above modification ( 0 to n iteratins)
+				double rounded_X = round(arrayX[i]);
+				double rounded_Y = round(arrayY[i]);
+				(loopA)
+				probability[i] = 0;
+				double prob_i = probability[i];
+				(loopB)
+				probability[i] = prob_i/((double) Ones);
+
+
+				a).
+					Notice that before the loopA, we don't need to reference memory at all
+					change to
+					double prob_i = 0;
+						
+						=> Test
+							FUNC TIME : 0.160392
+							TOTAL TIME : 2.258529
+
+							Mmm. Not that much..
+				b).
+					For last line, we don't need to do 
+					((double) Ones)
+					inside of loop since it is contatant in the loop.
+					Also, it will cost the time if the machine operate the casting
+					N times.
+
+					Outside of outer loop:
+						double double_ones = (double) Ones;
+
+					Inside of outer loop:
+						probability[i] = prob_i/double_ones;
+						
+					Since we won't modify double_ones inside of loop, we don't
+					need to make it private.
+
+						=> Test:
+							FUNC TIME : 0.160602
+							TOTAL TIME : 2.217645
+
+							It didn't change a lot...
+
+
+		Whatelse can we do about the second loop in the func1.
+		Not anymore....
+		I tried to parallized the inner loop to, but it gave me
+			FUNC TIME : 0.256344
+			TOTAL TIME : 2.334906
+		, which is slower. Maybe it is because have 4 threads and each has 4 threads
+		total 8 threads exit, and that cause the context switch by the OS.
+		
+		Let's profile the program again so that we can find next target.
+		$ make clean	
+		$ make omp GPROF=1
+
+		$ ./omp
+			FUNC TIME : 0.271437
+			TOTAL TIME : 2.416866
+
+		$ gprof omp | less
+
+			Each sample counts as 0.01 seconds.
+			%   cumulative   self              self     total           
+			time   seconds   seconds    calls  ms/call  ms/call  name    
+			65.08      0.39     0.39                             filter
+			18.36      0.50     0.11  4366470     0.00     0.00  rand2
+			8.34      0.55     0.05        1    50.06   155.85  addSeed
+			5.01      0.58     0.03                             sequence
+			1.67      0.59     0.01   491520     0.00     0.00  findIndexBin
+			1.67      0.60     0.01        1    10.01    10.01  imdilateDisk
+			0.00      0.60     0.00   488442     0.00     0.00  round
+			0.00      0.60     0.00       16     0.00     0.00  dilateMatrix
+			0.00      0.60     0.00       15     0.00     0.00  func1
+			0.00      0.60     0.00       15     0.00     0.00  func2
+			0.00      0.60     0.00       15     0.00     0.00  func3
+			0.00      0.60     0.00       15     0.00     0.00  func4
+			0.00      0.60     0.00       15     0.00     0.67  func5
+			0.00      0.60     0.00       15     0.00     0.00  rand1
+			0.00      0.60     0.00        2     0.00     0.00  get_time
+			0.00      0.60     0.00        1     0.00     0.00  elapsed_time
+			0.00      0.60     0.00        1     0.00     0.00  fillMatrix
+			0.00      0.60     0.00        1     0.00     0.00  func0
+			0.00      0.60     0.00        1     0.00     0.00  getNeighbors
+						
+			
+			===> func1 became a lot better!!!!!!!!
+				 However, it's not enough to satisfy 3.5 speed up!
+				 Even though filter and rand2 makes so much time, 
+				 we are only allowed to modify the func.c.
+				 From above experiments, we noticed that by usinsg multithreads
+				 on for loop, we got significant improvement.
+				 So let's apply it for other loops in func.c.
+				 
+
+3. Apply openMP on func0
+	
+	int i;
+	for(i = 0; i < n; i++){ 
+		weights[i] = 1/((double)(n));
+		arrayX[i] = xr;
+		arrayY[i] = yr; 
+	}
+
+	A. Is this parallelizable?
+		
+		-> Yes, each iteration doesn't depends on each other,
+		   so we can parallize the each iteration.
+
+		   #pragma omp parallel for num_threads(4) 
+
+	B. Memory Share
+		
+		in this case, we only need to make i
+		private
+		and others won't be matter the same reason as I mentioned
+		in above experiments.
+
+		private(i)
+
+		
+		=> Test
+			Before(I tested without case since the time will change depends on
+					how many people using lnxsrv09)
+				FUNC TIME : 0.160831
+				TOTAL TIME : 2.292092
+			After:
+				FUNC TIME : 0.161102
+				TOTAL TIME : 2.371239
+
+				-> got slower a bit, but not significant change
+
+	C. Other technique to go faster.
+		
+		we can change
+		weights[i] = 1/((double)(n));
+		because the right hand side is constant during iteration.
+
+		outside of loop:
+			double div = 1/((double)(n));
+	 	inside of loop:
+			weights[i] = div;
+
+			=> Test
+				FUNC TIME : 0.160414
+				TOTAL TIME : 2.366356
+
+				-> better a little bit
+
+
+3. Apply openMP on func2
+
+	There are 3 loops, I'll call them loop A, B, C in order below:	
+		
+		for(i = 0; i < n; i++)
+			 weights[i] = weights[i] * exp(probability[i]); 
+		
+		for(i = 0; i < n; i++)
+			sumWeights += weights[i];   
+		
+		for(i = 0; i < n; i++)
+		 weights[i] = weights[i]/sumWeights;
+
+	A. Is this parallelizable?
+		
+		All of loops are parallelizable since the next iteration won't depend on
+		previoius one.
+	
+		#pragma omp parallel for num_threads(4)
+
+	B. Memory Share
+		
+		in this case, we only need to make i
+		private
+		and others won't be matter the same reason as I mentioned
+		in above experiments.
+
+		private(i)
+		
+		
+		However, for loop B, 
+		we need to be careful here, since we want to make sure the accumulator works
+		we put
+		reduction(+:sumWeights)	
+
+		
+		=> Test
+			FUNC TIME : 0.151383
+			TOTAL TIME : 2.446607
+				-> got faster!!! 
+				   but we need to do better
+	
+	C. Other tequnique to improve
+
+		I thought we could combine the first loop, but it didn't
+		get better, so I left as the separed.
+		
+		
+ 
+
+4. Apply openMP on func3
+
+	     for(i = 0; i < n; i++){  
+		 	estimate_x += arrayX[i] * weights[i]; 
+			estimate_y += arrayY[i] * weights[i];
+		}
+
+
+	A. Is this parallelizable?
+		
+		Yes, same reason as others.
+
+		#pragma omp parallel for num_threads(4)
+		
+	B. Memory Share
+		
+		in this case, we only need to make i
+		private
+		and others won't be matter the same reason as I mentioned
+		in above experiments.
+
+		private(i)
+
+		However, we need to be careful here, since we want to make sure the accumulator works
+		we put
+		reduction(+:estimate_x, estimate_y)
+		
+		=> Test
+			FUNC TIME : 0.148767
+			TOTAL TIME : 2.268664
+			=> got faster!!
+
+	C. Other techinique
+		
+		reduce the memory reference
+			double weight = weights[i];
+			estimate_x += arrayX[i] * weight;
+			estimate_y += arrayY[i] * weight;
+
+		=> Test
+			FUNC TIME : 0.147693
+			TOTAL TIME : 2.227691
+			-> a bit faster
+			   but not much difference
+
+5. Apply openMP on func4
+
+	    for(i = 0; i < n; i++){
+			 u[i] = u1 + i/((double)(n));
+		}
+
+	A. Is this parallelizable?
+		
+		Yes, same reason as others.
+
+		#pragma omp parallel for num_threads(4)
+		
+	B. Memory Share
+		
+		in this case, we only need to make i
+		private
+		and others won't be matter the same reason as I mentioned
+		in above experiments.
+
+		private(i)
+
+		=> Test
+			FUNC TIME : 0.147455
+			TOTAL TIME : 2.314812
+			-> not that much improvment
+
+
+	C. Other techinique
+		
+		code motion on
+		((double)(n))
+		we can do this outside out loop
+		
+		=> Test
+			FUNC TIME : 0.147266
+			TOTAL TIME : 2.405810
+			-> not that much improvement
+
+6. Apply openMP on func5
+	
+	There are two loops in this func, I call this loopA and loopB in order below:
+		
+		for(j = 0; j < n; j++){
+			i = findIndexBin(cfd, 0, n, u[j]);
+			if(i == -1)
+				 i = n-1;
+			 x_j[j] = arrayX[i];
+			 y_j[j] = arrayY[i];
+		}
+
+		for(i = 0; i < n; i++){
+			arrayX[i] = x_j[i];
+			arrayY[i] = y_j[i];
+			weights[i] = 1/((double)(n));
+		}
+	    
+	A. Is this parallelizable?
+		
+		Yes, for both loop with same reason as others.
+
+		#pragma omp parallel for num_threads(4)
+		
+	B. Memory Share
+
+		loopA:
+			need to make both i and j private
+		private(i,j)
+		loopB:
+			need to make make i private	
+		private(i)
+
+		=> Test
+			FUNC TIME : 0.128842
+			TOTAL TIME : 2.477051
+			-> Improved wel!!!!
+			   can we still do better??
+
+	C. Other techinique
+		
+		loopA:
+			i = n-1;
+
+			n-1 is constant, so we can use code motion
+
+			=> Test
+				FUNC TIME : 0.128001
+				TOTAL TIME : 2.329144
+				-> a bit better
+
+		loopB:
+			weights[i] = 1/((double)(n)); 
+			RHS is const, so we can use code motion
+
+			=> Test
+				FUNC TIME : 0.128176
+				TOTAL TIME : 2.355427
+				->a bit slower?
+				  but maybe because of people using server
+				  since it is not significant change
+
+7. How much did we speeed up!??
+
+	Since the time will change depends on when I run,
+	I re-run the program with
+	make seq
+	and 
+	make omp
+	again and compare it
+	
+	$ make clean
+	$ make seq
+	$ ./seq
+		
+		-> output:
+			FUNC TIME : 0.465152
+			TOTAL TIME : 2.530080
+		
+	$ make clean
+	$ make omp
+	$ ./omp
+		
+		-> output:
+			FUNC TIME : 0.127910
+			TOTAL TIME : 2.252549
+
+	 0.465152 / 0.127910 = 3.636557
+
+	 => Therefore, we approximately
+	    speed up the program by 3.6x!!!!!!!
+
+8. Check outputs are still correct.
+	
+	Due to threads, sometime we treat the shared variable wrongly
+	and cause the wrong result. So let's check it!!
+
+	$ make clean
+	$ make check
+		->output:
+			gcc -o omp  -O3 -fopenmp filter.c main.c func.c util.c -lm
+			cp omp filter
+			./filter
+			FUNC TIME : 0.128061
+			TOTAL TIME : 2.554510
+			diff --brief correct.txt output.txt
+
+		=> So we could get the same result as before, no error with shared data!!
+		   The time showed above may vary. I got following as well:
+
+			  output2:
+				gcc -o omp  -O3 -fopenmp filter.c main.c func.c util.c -lm
+				cp omp filter
+				./filter
+				FUNC TIME : 0.128256
+				TOTAL TIME : 2.219023
+				diff --brief correct.txt output.txt
+
+			  output3:
+				gcc -o omp  -O3 -fopenmp filter.c main.c func.c util.c -lm
+				cp omp filter
+				./filter
+				FUNC TIME : 0.128530
+				TOTAL TIME : 2.272829
+				diff --brief correct.txt output.txt
+
+
+			
+
+
+9. Memory leaks check
+
+	By TA Yuchen's slide, OpenMP likes to lean the memory.
+	So let's check it.
+
+	$ make clean
+	$ make omp MTRACE=1
+	$ ./omp
+		FUNC TIME : 0.129491
+		TOTAL TIME : 2.499760
+	$ make checkmem
+		->output:
+			mtrace filter mtrace.out || true
+			env: ‘./filter’: No such file or directory
+
+			Memory not freed:
+			-----------------
+		   Address     Size     Caller
+		   addr2line: 'filter': No such file
+		   0x0000000000ac6070    0x8a0  at 
+		   0x0000000000ac6920     0xc0  at 
+		   addr2line: 'filter': No such file
+		   0x0000000000ac69f0     0x28  at 
+		   addr2line: 'filter': No such file
+		   0x0000000000ac6a20    0x240  at 
+		   0x0000000000ac6c70    0x240  at 
+		   0x0000000000ac6ec0    0x240  at
+			
+	
+	Seems like we have memory leak, but in the TA Yuchen's slide
+	 "If the memory error printed out by “make checkmem” is
+	  “Memory not freed”, don’t worry about it."
+	so we don't need to worry about this time.
+
+
+10. Comments on Number of threads I used.
+	
+	In above case, I assumed that the program will run on the 4 cores machine, and
+	I chose 4 threads so that context switch won't occur many times.
+	However, seems like linux server has more than 4 threads, so when there is no other students
+	using the server, and when we increased the number of threads, we can get the better
+	speed up. But if many people are using it, we have to share the cores, and context switch 
+	might occur more.
+	Since I got good steady result by using 4 threads for each, I'll keep as 4.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

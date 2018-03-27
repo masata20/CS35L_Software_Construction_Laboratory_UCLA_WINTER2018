@@ -1,0 +1,105 @@
+Name: Masataka Mori
+
+Problem3.64: 
+	Consider the following source code, where R, S, and T are 
+	constants declared with #define:
+
+	long a[R][S][T];
+
+	long store_ele(long i, long j, long k, long *dest) 
+	{
+		*dest = A[i][j][k];
+		return sizeof(A);
+	}
+
+	In compiling this program, GCC generates the following 
+	assemply code:
+
+	i in %rdi, j in %rsi, k in %rdx, dest in %rcx
+
+	store_ele:
+	leaq (%rsi, %rsi, 2), %rax  // %rax = 3*j
+	leaq (%rsi, %rax, 4), %rax  // %rax = 4(3j)+j = 13j
+	movq %rdi, %rsi             // j = %rsi = %rdi = i
+	salq %6, %rsi               // %rsi = i << 6
+	addq %rsi, %rdi             // %rdi = i + (i<<6)
+	addq %rax, %rdi             // %rdi = (i+(i<<6)) + 13j
+	addq %rdi, %rdx             // %rdx = k + ((i+(i<<6))+13j)
+	movq A(,%rdx,8), %rax       // %rax = 8*rdx+10 --------------LINE A
+	movq %rax, (%rcx)           // *dest = rax
+	movl $3640, %eax            // eax = 3640 ,reutrn value ------LINE B
+	ret
+
+====================================solution=============================================
+
+A. Extend Equation 3.1 from two dimentions to three to provide a formula
+   for the location of array element A[i][j][k]
+
+   Equation 3.1: T D[R][C]
+   				&D[i][j] = xd + L(C*i + j);
+						 = start address + offset [row major]
+
+	Since we always need to start from the address which is [0][0] or [0][0][0]
+	in 3D, the first term in equation will not change, however, when dimention
+	increase, we need to change the how to calculate the offset.
+	In row major, the last index [C] in 2d and [T] in 3d is the fastest to change its index
+	therefore, the third index [k] must be just constant k to calulate.
+	For example,if [0][0][1], the address must be 1, offset =L* k.
+	By thinking [i][j] as just one index[x], and think the quation as 2d
+	we can get offset = L(S*x + k)
+	now, if we think we only have [i][j], and use equation3.1
+	we can see x is equivalent to (T*i+j)
+	therefore
+	offset = L(S*(iT+j) + k)
+	and combine with the starting address
+	we can get
+	
+	&A[i][j][k] = A0 + L(T*S*i + S*j + k)
+
+	where A0 is the address of A[0][0][0]
+
+
+B. Use your reverse enginering skills to determine the values of R,S,and T based on 
+   the assembly code
+
+   At the LINE A above, we can see that it is tring to access to memory of array
+   which address is
+   8*%rdx + 10
+   from previous line of A
+   %rdx = k + ((i+(i<<6))+13j)
+   	    = k + ((i+(i*2^6))+13j)
+		= k + (i+64i+13j)
+		= 65i + 13j + k
+
+	The line A is
+	8*(65i+13j+k) + 10
+
+	by using part A
+
+	8*(65i+13j+k) + 10 = A0 + L(T*S*i + S*j +k)
+
+	we can easily guess that 
+	A0 = 10
+	T*S = 65.
+	S = 13,   therefore T = 5.
+
+
+	At the LINE B above, since %eax is return value, we can predict that
+	total size of array A is 3640.
+
+	Total size of array A = (data size)(R*S*T)
+	3640 = 8*R*13*5
+	455 = R*13*5
+	91 = R*13
+	R = 7
+
+	------------->Therefore, R = 7, S = 13, T = 5.
+
+
+
+
+
+
+
+
+

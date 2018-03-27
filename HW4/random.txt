@@ -1,0 +1,141 @@
+Name: Masataka Mori
+
+
+Problem 2.89:
+	We are runnig programs on a machine where values fo type int
+	have a 32 bit two's complement representation. Values of type
+	float use the 32 bit IEEE format, and values fo type double use
+	the 64 bit IEEE format.
+	We generate arbitary integers value x, y, and z, and convert them
+	to values of type double as follows;
+
+	/* Create some arbitray values */
+	int x = random();
+	int y = random();
+	int z = random();
+	/* Conver to double */
+	double dx = (double) x;
+	double dy = (double) y;
+	double dz = (double) z;
+
+	For each of the following C expression, you are to indicate whether or
+	not the expression always yields 1. If it always yields 1, describe the
+	underlying mathmatical principles. Otherwise, give an example of arguments
+	that make it yield 0. Note that you cannot use an IA32 machine running GCC
+	to test your answers, since it would use the 80 bit extended-precision
+	representation for both float and double.
+	
+
+A. (float)x == (float)dx
+	
+	It always yields to 1.
+
+		LHS: when converting integer to float. There won't be any overflow.
+			 but there might be rounding since fraction field can only 32bits.
+
+		RHS: if I changed expression a little, we get
+			 (float)(double)x
+			 When we convert int to double, the exact numeric value can be preserved since
+			 double has both greater range as well as greater precesion.
+			 When we convert double to float, the value can overflow +/-INF since the
+			 range is smaller. Ohtersie it maybe rounded.
+		 
+		 
+		 Since we convert x from int to double and to float, there wouldn't be
+		 the case where overflow happens.
+		 So only thing we need to care for both LHS and RHS is rounding in fraction field.
+		 However, in both case(int to float, or double to float), they will have the same way of rounding
+		 Therefore, LHS and RHS will always be the same.
+
+
+B. dx - dy == (double) (x - y)
+	
+	It yield to 0 like when RHS (x-y) overflow
+		Example:
+			x = INT_MIN; // -2147483648
+			y = 1
+				LHS:
+					x = 0x80000000
+					y = 1
+					Since when convert to int to double, there won't be overflow,
+					ans also they don't round in this case, so
+					dx - dy = -2147483648.0 - 1.0 = -2147483649.0 = LHS
+				
+				RHS:
+					x = 0x80000000
+					-y = ~y + 1 = 0xfffffffe + 1 = 0xffffffff
+					x - y = 0x80000000 + 0xffffffff
+						in the most significant byte
+							1000 + 1111 = 10000, so 
+					x - y = 0x1 0fffffff ---> overflow, and there is -fwrapv, so 
+					      = 0x0fffffff
+						  which is positive
+				
+				Since LHS is not equal to RHS, we proved that it can yield to 0.
+
+C. (dx + dy) + dz == dx + (dy + dz)
+	
+	It always yield to 1.
+
+		Since dx, dy, dz are the values which converted from integer, there is
+		no way which those addition will overflow and get infinity.
+		Integer have range from -2^31 to 2^31-1(INT_MIN to INT_MAX)
+		Since double can represent finite number around +/-1.8*10^308,
+		which is way bigger than addtion of 3 all INT_MINs or all INT_MAXs,
+		so there is no way to occure the overflow and get infinity.
+		Therefore, it always yields to 0.
+
+
+D. (dx * dy) * dz == dx * (dy * dz)
+	
+	It can yield to 0 since there might be and roundings.
+		
+		When there is too many fraction field there will be roundings.
+		Double can hold 52 bits for fration
+	
+		Example:  	
+				x = Tmax - 10 = 2147483637
+				y = Tmax - 13 = 2147483634                 
+				z = Tmax - 26 = 2147483621        
+
+				dx = 2147483637.0 = 0100000111011111111111111111111111111101010000000000000000000000 
+				dy = 2147483634.0 = 0100000111011111111111111111111111111100100000000000000000000000
+				dz = 2147483621.0 = 0100000111011111111111111111111111111001010000000000000000000000
+
+				LHS:
+					dx*dy = 4.6116859647402967E18 = 0100001111001111111111111111111111111001110000000000000000000000
+					*dz = 9.90352007447537E27     = 0100010110111111111111111111111111110011000000000000000000000001
+
+				RHS:
+					dy*dz = 4.611685930380559E18  = 0100001111001111111111111111111111110101110000000000000000000001
+					*dx = 9.903520074475371E27    = 0100010110111111111111111111111111110011000000000000000000000010
+
+				
+		Since LHS != RHS, it can yield to zero when the rounding occur like example 
+
+E. dx/dx == dz/dz
+	
+	It can yield to 0 when there is NaN on the one side.
+
+	To create the NaN in one side,
+	let x = 0, z = 1.
+	which is dx = 0.0, z = 1.0
+
+	LHS:
+		0.0/0.0 = NaN
+
+	RHS:
+		1.0/1.0 = 1.0
+
+	LHS != RHS
+	Therefore it can yield to 0.
+
+
+
+
+
+
+
+
+
+
