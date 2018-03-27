@@ -1,0 +1,580 @@
+
+Name:Masataka Mori
+
+
+Lab Notebook
+
+
+1. Gather Insturction traces
+	In this part, I need to examine the each instruction and 
+	what they are doing in register or memory after each instructions
+	By using following commands, I examine each instruction and effects
+
+	// run the function with gdb debugger
+	gdb --args ~eggert/bin64/bin/emacs-25.2 -batch -eval '(print (* 1250284240 -1844255039))'
+
+	// set the break point at Ftimes so that 
+	// we can start debugging from there
+	(gdb) break Ftimes
+
+	// Ask debugger to print each instruction as it's executed
+	(gdb) set disassemble-next-line on
+
+	// Run function to start debug
+	(gdb) run
+	-----> because of previous setting, it outputs the first instruction
+	
+	// See the all registers information --> gives contents(value) of register
+	(gdb) info registers
+
+	// Seek the each M[R[registers]] initial state
+	(gdb) x/x address ---> hex state
+	(gdb) x/u address ---> unsigned interger
+	
+	// go to next instruction by
+	(gdb) stepi
+
+	=====> write down the trace ASCII text in trace.tr with specified format
+
+	Now, let me examine data.c code
+	and brief explanation of how they operate multiplication
+
+Ftimes:
+	it has two arguments
+		ptrdiff_t nargs
+		Lisp_Object* args
+
+		UNKNOWN TYPE:
+			ptrdiff_t
+			List_Object
+
+	and simply call function arith_driver with following argument
+		Amult: enum and value is 2 defined in data.c
+		nargs
+		args
+
+
+arith_driver:
+	it takes following argument
+		enum arithop code       == passed Amult
+		ptrdiff_t nargs
+		Lisp_Object *args
+
+	init
+		Lisp_Object val
+		ptrdiff_t argnum, ok_args
+		EMACS_INT accum =0;
+		EMACS next, ok_accum;
+		bool overflow = 0;
+	
+	by first switching
+	 Amult:
+		EMAC_INT accum = 1
+
+	use for loop from 0 to nargs-1
+		check overflow: if overflow ok_args=argnum, ok_accum=annum
+		val = arg[argnum];
+		check float or not
+		arg[argnum] = val;
+		next = XINT(args[argnum]);
+
+		use switch(code)
+			Amulst:
+				overflow != INT_MULTILY_WARPV(accum, next, &accum);
+
+	end loop
+	
+	XSETINT(val,accum);
+	return val;
+	
+	UNKNOWN DATATYPE
+		EMACS_INT
+		EMACS
+	UNKNOWN FUNCTION
+		XINT
+		INT_MULTILY_WRAPV
+		XSETINT
+	To examine those unknows 
+======
+	Examine lisp.c code
+		ptrdiff_t count: Signed integral type of the result of subtracting two pointers.
+						in stddef.h
+						(http://pubs.opengroup.org/onlinepubs/7908799/xsh/stddef.h.html)
+		Lisp_Object:
+			#ifdef CHECK_LISP_OBJECT_TYPE
+			 typedef struct { EMACS_INT i; } Lisp_Object;
+			 #else /* CHECK_LISP_OBJECT_TYPE
+			 /* If a struct type is not wanted, define Lisp_Object as just a number */ 
+			 typedef EMACS_INT Lisp_Object;
+
+		EMACS_INT:
+			 EMACS_INT - signed integer wide enough to hold an Emacs value
+			 typedef int EMACS_INT; 
+		
+		XINT:
+			XINT (obj) is the integer value.
+			INLINE EMACS_INT
+			(XINT) (Lisp_Object a)
+				return lisp_h_XINT (a);
+			/* Extract A's value as a signed integer.  */	
+			XINT (Lisp_Object a)
+				 EMACS_INT i = XLI (a);
+				 if (! USE_LSB_TAG)
+				 	 EMACS_UINT u = i;
+					 i = u << INTTYPEBITS;
+
+				return i >> INTTYPEBITS
+			
+		INTTYPEBITS:
+			 /* Number of bits in a Lisp fixnum tag.  */    
+			 INTTYPEBITS = GCTYPEBITS - 1
+
+		GCTYPEBITS:
+			#define GCTYPEBITS 3 
+		
+		USE_LSB_TAG:
+			Tagging scheme
+				USE_LSB_TAG: we can assume the least 3bits of pointers are
+							 always 0, and we can thus use them to hold tag
+							 bits, without restricting our addressing space.
+				!USE_LSB_TAG: use the top 3 bits for taggin, thus
+							 restricting our possible address range.
+				if USE_LSB_TAG			
+				#define VAL_MAX (EMACS_INT_MAX >> (GCTYPEBITS - 1))
+
+				Whether the least-significant bits of an EMACS_INT contain the tag. 
+				On hosts where pointers-as-ints do not exceed VAL_MAX / 2, USE_LSB_TAG is:
+				a. unnecessary, because the top bits of an EMACS_INT are unused, and 
+				 b. slower, because it typically requires extra masking.
+				 So, USE_LSB_TAG is true only on hosts where it might be useful.
+
+		
+		XSETINT:
+			 #define XSETINT(a, b) ((a) = make_number (b))
+			 #define make_number(n) lisp_h_make_number (n) (if USE_LSB_TAG)
+			 # define lisp_h_make_number(n) \
+			 	XIL ((EMACS_INT) (((EMACS_UINT) (n) << INTTYPEBITS) + Lisp_Int0))
+
+		INT_MULTILY_WRAP:
+			Restrictions:
+				Their first two arguments must be integer expressions.
+				others in website below
+			INT_MULTIPLY_WRAPV (a, b, r)
+			Store the low-order bits of the product of a and b into *r. 
+			Return true if overflow occurred, false if the low-order bits are the mathematically-correct product. 
+			See above for restrictions. 
+			(https://www.gnu.org/software/gnulib/manual/html_node/Wraparound-Arithmetic.html)
+
+==============
+	Now let me summarize the What is happening during Ftimes function call
+	by using above knowledge we gathered and trace.tr
+	
+	Ftimes:
+		When the Ftimes gets called
+		1st argument passed is stored in rsi, as second arguments arith_driver(line 26)
+		2nd argument passed is stored in rdx, as third aruguments arith_driver(line 25)
+		store 2 (Amul in enum) in rdi, as 1st arguments of arith_driver
+
+		jmp to arith_driver with above arugments
+
+	arith_driver:
+		After initalizing some value(line 29 to 35)
+		check the 1st arguments rdi which is arith hop code (line 36)
+		set accum = 1, corresponds r12 = 1 (line 38)
+		compare the 3 and 1st argu, since 2 is smaller than 3 jump(line 40)
+		
+		store the 3rd argu(*args) to r15 (line 43)
+		store the 2nd arg(nargs) to rbp (line 44)
+		store the 1st arg(Amul) to r14 (line 45)
+		
+		store accum =1(r12) to  0x8(%rsp)
+		rbx =0(line 47)
+		r13 =0(line 48)
+		(%rsp) = 0
+
+
+
+=================================================================================================================
+A few more questions,
+Problem 3
+
+
+	// run the function with gdb debugger
+	gdb --args ~eggert/bin64/bin/emacs-25.2 -batch -eval '(print (* most-positive-fixnum most-positive-fixnum most-positive-fixnum most-positive-fixnum))'
+
+	// set the break point at Ftimes so that 
+	// we can start debugging from there
+	(gdb) break Ftimes
+
+	// Ask debugger to print each instruction as it's executed
+	(gdb) set disassemble-next-line on
+
+	// Run function to start debug
+	(gdb) run
+	-----> because of previous setting, it outputs the first instruction
+	
+	// See the all registers information --> gives contents(value) of register
+	(gdb) info registers
+
+	// Seek the each M[R[registers]] initial state
+	(gdb) x/x address ---> hex state
+	(gdb) x/u address ---> unsigned interger
+	
+	// go to next instruction by
+	(gdb) stepi
+
+	Key part trace!!
+
+	first appeared imul
+	0x0000000000544e50 <arith_driver+368>:	49 0f af fc	imul   %r12,%rdi	rdi = 0x1fffffffffffffff	2305843009213693951
+		r12 = 1
+	second appeared imul
+	0x0000000000544e50 <arith_driver+368>:	49 0f af fc	imul   %r12,%rdi	rdi = 0xc000000000000001     (obivously overflowed)
+		r12 = 0x1fffffffffffffff (previous multiple result)
+	0x0000000000544e54 <arith_driver+372>:	0f 90 c0	seto   %al			al = 1 since overflowed above
+	third appeard imul
+	0x0000000000544e50 <arith_driver+368>:	49 0f af fc	imul   %r12,%rdi	rdi = 0x5fffffffffffffff	(overflowed)
+		r12 = 0xc000000000000001 (previous multi result)
+	0x0000000000544e54 <arith_driver+372>:  0f 90 c0    seto   %al          al = 1 since overflowed above
+	forth appeared imul
+	0x0000000000544e50 <arith_driver+368>:	49 0f af fc	imul   %r12,%rdi	rdi = 0x8000000000000001   	(overflowed)
+		r12 = 0x5fffffffffffffff (previous multi result)
+	0x0000000000544e54 <arith_driver+372>:	0f 90 c0	seto   %al			al = 1 since overflowed above
+
+	All multiplication which we wanted to is done, now
+	rdi = 0x8000000000000001
+
+	and see what happen to rdi
+	0x0000000000544e57 <arith_driver+375>:	49 89 fc	mov    %rdi,%r12
+	r12 = rdi = 0x8000000000000001
+	now what's gonna happen to r12
+	0x0000000000544dfc <arith_driver+284>:	4a 8d 04 a5 02 00 00 00	lea    0x2(,%r12,4),%rax	rax = 0x6
+
+
+
+=========================================================================================================================
+A few more questions,
+Problem 6 
+
+	Before observing the tacktrace, let me examine what
+	print (format-time-string "%Y-%m-%d %H:%M:%S %Z" nil (concat (make-string 1000 ?X) "0")))'
+	does.
+	This is using the function
+	format-time-string in elipse
+		Function: format-time-string format-string &optional time zone
+			This function converts time (or the current time, if time is omitted or nil) to a string according to format-string. 
+			The conversion uses the time zone rule zone, which defaults to the current time zone rule. 
+			(https://www.gnu.org/software/emacs/manual/html_node/elisp/Time-Parsing.html)
+	so compare with out emacs command
+	
+		argument1:format-time-string == "%Y-%m-%d %H:%M:%S %Z"
+		argument2:nil--> obtain current time
+		
+		UNKNOWN: (concat (make-string 1000 ?X) "0")
+
+	Seems like there is an unknown argument, so I tried following code
+Trial 1  : emacs -Q -batch -eval '(print (format-time-string "%Y-%m-%d %H:%M:%S %Z" nil))'
+	and it gave me 
+	"2017-11-03 21:34:38 PDT"
+	without any error.
+
+	Now let's try to examine unknown third argument
+	(concat (make-string 1000 ?X) "0")
+
+	It is using the function concat in elips
+		Function: concat &rest sequences
+			This function returns a new string consisting of the characters in the arguments passed to it (along with their text properties, if any).
+			The arguments may be strings, lists of numbers, or vectors of numbers; they are not themselves changed. 
+			If concat receives no arguments, it returns an empty string.
+			(https://www.gnu.org/software/emacs/manual/html_node/elisp/Creating-Strings.html)
+		compare with our emacs command
+
+			arguments1: (make-string 1000 ?X)
+			arguments2: "0"
+			
+			what is argument1?
+			make-string 1000 ?X
+			this is using make-string function in elips
+				Function: make-string count character
+				This function returns a string made up of count repetitions of character. If count is negative, an error is signaled.
+				(https://www.gnu.org/software/emacs/manual/html_node/elisp/Creating-Strings.html)
+			so it creates the string which has a thousand of "X"
+	Now let me try following command
+Trial 2: emacs -Q -batch -eval '(print(concat (make-string 1000 ?X) "0"))'
+	and gives
+	"XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+	XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+	XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+	XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+	XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+	XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+	XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX0"
+
+	By observing above, each 2 trial I did work correct.
+	The difference between my trail1 and our original emacs command
+	they have differnct number of arguments.
+	According to the definition of function format-time-string, desrcibed above
+	format-time-string function can only have 2 arguments,
+	but we are giving 3 arguments.
+	Maybe, when user put the arguments number which is bigger than the elisp function
+	it gives error.
+
+	To test my assumption, I try following command
+trial 3:  emacs -Q -batch -eval '(print (format-time-string "%Y-%m-%d %H:%M:%S %Z" nil "aaa"))'
+	it gave me 
+	"2017-11-04 05:05:21 aaa"
+	
+	
+trail 4:  emacs -Q -batch -eval '(print (format-time-string "%Y-%m-%d %H:%M:%S %Z" nil "
+			"XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+	XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+	XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+	XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+	XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+	XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+	XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX0"))'
+	and gave me
+	*** Error in `emacs': double free or corruption (!prev): 0x00000000031cd300 ***
+	which is same error!!!!!!!!!
+
+	Since trial 3 didn't give me any error, problem is not because of the excess argument.
+	So maybe the problem is number of words in the argument.
+
+
+	To test my second assumption, I tried the following commands
+	Before testing notice that we have 1001 words in 3rd argument.
+
+
+trail 5: emacs -Q -batch -eval '(print (format-time-string "%Y-%m-%d %H:%M:%S %Z" nil "
+			"XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+	XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+	XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+	XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+	XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+	XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+	XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"))'
+	
+	3rd argument has 1000 words.
+	it gave me
+	"2017-11-04 05:11:03 XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+	XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+	XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+	XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+	XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+	XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+	XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
+
+trail6:  emacs -Q -batch -eval '(print (format-time-string "%Y-%m-%d %H:%M:%S %Z" nil "
+			"XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+	XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+	XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+	XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+	XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+	XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+	XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX000"))'
+	3rd argument has 1003
+	and it gave me
+	*** Error in `emacs': double free or corruption (!prev): 0x0000000002b02300 ***
+	which is same error as our original argument!!
+
+trial 7: emacs -Q -batch -eval '(print (concat (make-string 2000 ?X) "0")))'
+	which gave me
+	"XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+	XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+	XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+	XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+	XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+	XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+	XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX0"
+
+	By observing trial 5,6,7.
+	Since trial7 didn't give any error, the problem is not the size of printing word.
+	But since the trial5 and 6 gave me the result what I wanted
+	Maybe, when there is a exceess argument in the function, the size of excess argument is limited.
+	
+	To support my 3rd assumption, I tried following trials.
+
+trail 8:  emacs -Q -batch -eval '(print (format-time-string "%Y-%m-%d %H:%M:%S %Z" nil (concat (make-string 998 ?X) "0")))'
+	which gave me same error with orignal emacs command.
+
+trial 9: emacs -Q -batch -eval '(print (format-time-string "%Y-%m-%d %H:%M:%S %Z" nil (concat (make-string 100 ?X) "0")))'
+	which gave me
+	"2017-11-04 05:25:12 XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
+	without error I wanted.
+
+trial 10: emacs -Q -batch -eval '(print (format-time-string "%Y-%m-%d %H:%M:%S %Z" nil (concat (make-string 1000 ?X) "a")))'
+	which gave me
+	"2017-11-04 05:28:38 XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+	XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+	XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+	XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+	XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+	XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+	XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXa"
+
+	Because of Trail 10, my assumption was disproved.
+	Why when I changed the 0 to "a" the error occur?
+	Let me try another trial
+trial 11: emacs -Q -batch -eval '(print (format-time-string "%Y-%m-%d %H:%M:%S %Z" nil (concat (make-string 1000 ?X) "A")))'
+	which gave no error
+
+trial 12: macs -Q -batch -eval '(print (format-time-string "%Y-%m-%d %H:%M:%S %Z" nil (concat (make-string 1000 ?X) "1")))'
+	which game me the same error as original!!!!!!!!!!!!!!
+
+trial 13: emacs -Q -batch -eval '(print (format-time-string "%Y-%m-%d %H:%M:%S %Z" nil (concat (make-string 1000 ?X) "?")))'
+	which gave me the same error!!!!!!!!!!
+
+trial 14: emacs -Q -batch -eval '(print (format-time-string "%Y-%m-%d %H:%M:%S %Z" nil (concat (make-string 1000 ?X) "adjfhajsdhfhdsfjahfahfadfsaf")))'
+	which gave me no error
+
+trial 15:  emacs -Q -batch -eval '(print (format-time-string "%Y-%m-%d %H:%M:%S %Z" nil (concat (make-string 1000 ?X) "adjfhajsdhfhdsfja0hfahfadfsaf")))'
+	which gave me the same error!!!!
+
+trial 16:  emacs -Q -batch -eval '(print (format-time-string "%Y-%m-%d %H:%M:%S %Z" nil (concat (make-string 1000 ?X) "23482158798577345")))'
+	which gave me no error.
+
+trial 17: emacs -Q -batch -eval '(print (format-time-string "%Y-%m-%d %H:%M:%S %Z" nil (concat (make-string 1000 ?X) "adjfhajsdh??fhdsfjahfahfadfsaf")))'
+	which gave me error!!!!!!!!!!!!!!!!!!!1
+
+trial 19: emacs -Q -batch -eval '(print (format-time-string "%Y-%m-%d %H:%M:%S %Z" nil (concat (make-string 1000 ?X) "+")))'
+	which gave me error!!!!!!!!!!!!!!!!!
+
+trial 20: emacs -Q -batch -eval '(print (format-time-string "%Y-%m-%d %H:%M:%S %Z" nil (concat (make-string 1000 ?X) ".")))'
+	which gave me error!!!!!!!!!!!!!!!!!
+
+trial 21: emacs -Q -batch -eval '(print (format-time-string "%Y-%m-%d %H:%M:%S %Z" nil (concat (make-string 1000 ?X) "A")))'
+	which gave me no error!!!!!!!!
+
+	By trial 11-20,
+	I can conclude that whenever the last argument has not alphabetic characters such as numbers, ., +, "?",
+	it gives me the error!!
+
+
+	Now, let's try to understand what's happening on low-level
+
+	// run the function with gdb debugger
+	gdb --args ~eggert/bin64/bin/emacs-25.2 -batch -eval '(print (format-time-string "%Y-%m-%d %H:%M:%S %Z" nil (concat (make-string 1000 ?X) "0")))'
+
+	// Run function to start debug
+	(gdb) run
+	-----> because of previous setting, it outputs the first instruction
+
+	// backtrace when aborted
+	(gdb) bt
+
+	Information about backtrace
+		A backtrace is a summary of how your program got where it is. It shows one line per frame, for many frames, 
+		starting with the currently executing frame (frame zero), followed by its caller (frame one), and on up the stack
+		The display for frame zero does not begin with a program counter value, indicating that your program has stopped at the beginning of the code
+		for line 993 of builtin.c.
+		(https://ftp.gnu.org/old-gnu/Manuals/gdb/html_node/gdb_42.html)
+
+	// Ask debugger to print each instruction as it's executed
+	(gdb) set disassemble-next-line on
+
+	
+	// See the all registers information --> gives contents(value) of register
+	(gdb) info registers
+
+	// Seek the each M[R[registers]] initial state
+	(gdb) x/x address ---> hex state
+	(gdb) x/u address ---> unsigned interger
+	
+	// go to next instruction by
+	(gdb) stepi
+
+Backtrace gdb gives
+d 1 "emacs-25.2" received signal SIGSEGV, Segmentation fault.
+0x00007ffff16be55b in __strcpy_sse2_unaligned () from /lib64/libc.so.6
+(gdb) bt
+#0  0x00007ffff16be55b in __strcpy_sse2_unaligned () from /lib64/libc.so.6
+#1  0x0000000000553272 in emacs_setenv_TZ (tzstring=0x1491249 'X' <repeats 135 times>, "T", 'X' <repeats 64 times>...) at editfns.c:2428
+#2  0x00000000005d3819 in change_env (tz=0x1491240) at time_rz.c:223
+#3  revert_tz (tz=tz@entry=0x1491240) at time_rz.c:268
+#4  0x00000000005d3b8d in revert_tz (tz=0x1491240) at time_rz.c:282
+#5  localtime_rz (tz=0x1490e40, t=0x7fffffffc5c8, tm=0x7fffffffd5b0) at time_rz.c:289
+#6  0x0000000000553c6a in emacs_localtime_rz (tm=0x7fffffffc590, t=0x7fffffffc5c8, tz=<optimized out>) at editfns.c:107
+#7  format_time_string (format=0x1482470 "%Y-%m-%d %H:%M:%S %Z", formatlen=20, t=..., zone=zone@entry=21564340, tmp=tmp@entry=0x7fffffffd5b0) at editfns.c:2070
+#8  0x0000000000553ead in Fformat_time_string (format_string=<optimized out>, timeval=<optimized out>, zone=21564340) at editfns.c:2049
+#9  0x000000000055a007 in eval_sub (form=<optimized out>) at eval.c:2178
+#10 0x0000000000559e3d in eval_sub (form=form@entry=17223827) at eval.c:2160
+#11 0x000000000055b92c in Feval (form=17223827, lexical=<optimized out>) at eval.c:1994
+#12 0x00000000005583cf in Ffuncall (nargs=2, args=args@entry=0x7fffffffd8b0) at eval.c:2702
+#13 0x000000000058a9a6 in exec_byte_code (bytestr=<optimized out>, vector=<optimized out>, maxdepth=<optimized out>, args_template=<optimized out>, nargs=nargs@entry=1, args=<optimized out>, 
+    args@entry=0x7fffffffd8b0) at bytecode.c:880
+#14 0x000000000055a3ac in funcall_lambda (fun=9891764, nargs=nargs@entry=1, arg_vector=0x7fffffffd8b0, arg_vector@entry=0x7fffffffda70) at eval.c:2863
+#15 0x000000000055821b in Ffuncall (nargs=2, args=args@entry=0x7fffffffda68) at eval.c:2760
+#16 0x000000000058a9a6 in exec_byte_code (bytestr=<optimized out>, vector=<optimized out>, maxdepth=<optimized out>, args_template=<optimized out>, nargs=nargs@entry=0, args=<optimized out>, 
+	    args@entry=0x7fffffffda68) at bytecode.c:880
+#17 0x000000000055a3ac in funcall_lambda (fun=9868740, nargs=nargs@entry=0, arg_vector=0x7fffffffda68, arg_vector@entry=0x7fffffffdc78) at eval.c:2863
+#18 0x000000000055821b in Ffuncall (nargs=1, args=args@entry=0x7fffffffdc70) at eval.c:2760
+#19 0x000000000058a9a6 in exec_byte_code (bytestr=<optimized out>, vector=<optimized out>, maxdepth=<optimized out>, args_template=<optimized out>, nargs=nargs@entry=0, args=<optimized out>, 
+		    args@entry=0x7fffffffdc70) at bytecode.c:880
+#20 0x000000000055a3ac in funcall_lambda (fun=9864748, fun@entry=9864701, nargs=nargs@entry=0, arg_vector=0x7fffffffdc70, arg_vector@entry=0x7fffffffdda0) at eval.c:2863
+#21 0x000000000055a7ab in apply_lambda (fun=9864701, args=<optimized out>, count=count@entry=4) at eval.c:2800
+#22 0x0000000000559d65 in eval_sub (form=form@entry=17631283) at eval.c:2247
+#23 0x000000000055b92c in Feval (form=17631283, lexical=<optimized out>) at eval.c:1994
+#24 0x0000000000557862 in internal_condition_case (bfun=bfun@entry=0x4e9de0 <top_level_2>, handlers=handlers@entry=19104, hfun=hfun@entry=0x4ee750 <cmd_error>) at eval.c:1315
+#25 0x00000000004eabec in top_level_1 (ignore=ignore@entry=0) at keyboard.c:1129
+#26 0x00000000005577e1 in internal_catch (tag=tag@entry=45936, func=func@entry=0x4eab90 <top_level_1>, arg=arg@entry=0) at eval.c:1080
+#27 0x00000000004e9d63 in command_loop () at keyboard.c:1090
+#28 0x00000000004ee377 in recursive_edit_1 () at keyboard.c:697
+#29 0x00000000004ee688 in Frecursive_edit () at keyboard.c:768
+#30 0x00000000004190fb in main (argc=4, argv=0x7fffffffe128) at emacs.c:1629
+
+	Error occured at 
+	#0  0x00007ffff16be55b in __strcpy_sse2_unaligned () from /lib64/libc.so.6 
+
+	Seqmentation fault: Segfaults are caused by a program trying to read or write an illegal memory location.
+						(https://kb.iu.edu/d/aqsj)
+
+	To see detail
+	(gdb) set disassemble-next-line on
+	(gdb) break emacs_setenv_TZ   
+	where just before the error occurs
+	(gdb) si
+	or 
+	(gdb) finish
+
+	Keep going with this unitl it reaches to 
+	0x00007ffff16be55b in __strcpy_sse2_unaligned () from /lib64/libc.so.6 
+
+	=> 0x0000000000553230 <emacs_setenv_TZ+0>:	41 55	push   %r13
+	   0x0000000000553232 <emacs_setenv_TZ+2>:	41 54	push   %r12
+	   0x0000000000553234 <emacs_setenv_TZ+4>:	55	push   %rbp
+	   0x0000000000553235 <emacs_setenv_TZ+5>:	53	push   %rbx
+	   0x0000000000553236 <emacs_setenv_TZ+6>:	48 83 ec 08	sub    $0x8,%rsp
+	   0x000000000055323a <emacs_setenv_TZ+10>:	48 8b 2d b7 b5 62 00	mov    0x62b5b7(%rip),%rbp        # 0xb7e7f8 <tzvalbuf>
+	   0x0000000000553241 <emacs_setenv_TZ+17>:	4c 8b 25 a8 b5 62 00	mov    0x62b5a8(%rip),%r12        # 0xb7e7f0 <tzvalbufsize.19776>
+	(gdb) finish
+	  Run till exit from #0  emacs_setenv_TZ (tzstring=0x1491249 'X' <repeats 200 times>...) at editfns.c:2404
+
+		Thread 1 "emacs-25.2" received signal SIGSEGV, Segmentation fault.
+		0x00007ffff16be55b in __strcpy_sse2_unaligned () from /lib64/libc.so.6
+		=> 0x00007ffff16be55b <__strcpy_sse2_unaligned+411>:	f3 0f 7f 7f f0	movdqu %xmm7,-0x10(%rdi)
+
+so the very last insturction was 
+	 emacs_setenv_TZ (tzstring=0x1491249 'X' <repeats 200 times>...) at editfns.c:2404
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

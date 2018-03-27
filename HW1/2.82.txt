@@ -1,0 +1,177 @@
+Problem: We are running programs where values of type int are 32 bits. They are represented in two's complement, and they are right shifted arithemetically. Values of type unsigned are also 32bits. We generate aribitrary values x and y, and conver them to unsigned values as follows:
+
+/* Create some aribtrary values */
+int x = random();
+int y = random();
+/* Convert to unsigned */
+unsigned ux = (unsigned) x;
+unsigned uy = (unsigned) y;
+
+For each of the following C expressions, you are to indicate whether or not the expression always yields 1. If it is always yields 1, describe the underlying mathematical principles. Otherwise, given an example of arguments that make it yield 0.
+
+================================ My Answers =====================================
+
+A. (x<y) == (-x>-y)
+
+	Not always true.	
+	When x = INT_MIN, -x is also equal to INT_MIN. (using property -x = ~x + 1)
+	Let y = 0.
+	Then,
+	LHS = INT_MIN < 0 ---> which is true
+	RHS = INT_MIN > 0 ---> which is false.
+	Therefore, not always true.
+
+-----------------------------------------------------------------------------------------------------------
+
+B. ((x+y)<<4) + y-x == 17*y + 15*x
+	
+	Always true.
+	((x+y)<<4) is equiavalent to mulitiplying (x+y) by 2 to the power of 4th, so the equation becomes
+	(x+y) * 16 + y - x
+	= 16x + 16y + y -x =  15*x + 17*y. Proved.
+
+----------------------------------------------------------------------------------------------------------
+
+C. ~x+~y+1 == ~(x+y)
+
+	Always true.
+	we know that -x = ~x + 1, and -y = ~y + 1
+	rearrage it, ~x = -x - 1, and ~y = -y - 1
+	Then,
+	LHS = -x - 1 -y - 1 + 1 = -x -y -1
+
+	Also, by same reason,
+	RHS = ~(x+y)
+		= -(x+y) - 1
+	    = -x -y -1 = LHS
+	Proved.
+
+---------------------------------------------------------------------------------------------------------
+
+D. (ux-uy) == -(unsigned)(y-x)
+
+	Not always true.
+	For examlple, when y - x < 0. (For conviniecne, I only present 4bits represetnation)
+	Let x = 5, y = 3. (x = 0101, y = 0011)
+	-> ux = 5, uy = 3 since they are just positve
+
+	LHS = 5 - 3 
+   		= 2. (0010)
+	
+	RHS = -(unsigned)(3-5)
+		= -(unsigned)(-2)
+		= -(unsigned)(1110)  
+	since bit doesn't change, but encoding change,
+	and we know 1110u is 8+4+2 = 14
+	RHS	= -14, which is not equal to LHS.
+	Therefore, not always.
+
+----------------------------------------------------------------------------------------------------
+
+E. ((x >> 2) << 2) <= x
+
+	Always true.	
+	To determine, we need to consider 2 cases.
+
+	CASE 1: x >= 0
+		
+		LHS: (x >> 2) == x / 2^2 = x/4
+			 << 2 => x/4 * 2^2 = x
+
+		so LHS = x
+
+		RHS: is x
+
+		LHS = RHS ------------1
+
+	CASE 2: x < 0
+
+		LHS: (x >> 2): since x < 0, machine does (x + (1 << 2)-1) >> 1, and we get x/2^2
+ 			 and by << 2
+			 we get
+			 x/4 * 2^2 = x
+		
+		LHS = RHS ------------2
+
+	By 1 and 2, we can say it is always true.
+
+--------------------------------------------------------------------------------------------------
+
+F. x >> 1 == (ux >> 1) + (ux & (-1 << 31))
+	
+	Always True.
+	To determine that we need to compare two cases
+	
+	CASE1 : x >= 0
+		
+		LHS : x >> 1 == x / 2^1
+
+			so LHS = x/2.
+
+		RHS:
+			First Term: (ux >> 1) == ux/2
+		
+			second term: (ux & (-1 << 31))
+				
+					since (-1 << 31) gives us, 0x8fffffff, which is (1000 0000 0000 0000 0000 0000 0000 0000),
+					so if we operate & with this we get 0x00000000 since x have 0 on its the most significant bit(x>=0)
+					so second term is just 0
+
+		so RHS = ux/2 + 0 
+
+		Since we comparing the signed and unsigned, we need to cast signed to unsigned.
+		But since x >= 0, we know x = ux.
+		Then, 
+			LHS = ux /2 = ux/2 + 0 = RHS ---------------- 1
+
+
+	CASE2 : x < 0.
+
+		LHS: Since x < 0, machine does (x + (1 << 1)-1) >> 1, and we get x/2
+		
+			so LHS = x/2
+
+		RHS: 
+			First Term: (ux >> 1) => ux/2
+	      	
+			Second term: (ux & (-1 << 31))
+				
+					since (-1 << 31) gives us, 0x8fffffff, which is (1000 0000 0000 0000 0000 0000 0000 0000),
+					so if we operate & with this we still have 0x8ffffff since x also have 1 on its the most significant bit(since x < 0)
+					but since it is operated with ux, it become 0x8fffffffu = 2^31
+
+			so RHS = ux/2 + 2^31
+
+	Since LHS is signed and RHS is unsigned, the LHS will be cast to LHS by using T2U.
+	Since x < 0, we use T2U(x) = x+2^32 
+
+	so, LHSu = (x+2^32)/2 = x/2 + 2^31
+	
+	Therefore, RHS = LHS when x < 0 ----------------- 2
+
+	By considering 1 and 2 as I indicated, it is always true.
+
+--------------------------------------------------------------------------------------------------------------------------------------
+
+G. x % 128 == (x & 127)
+
+	Always true.
+	LHS: x % 128 == x mod 128.
+		
+		Since we know that trancating w bits into k bits(w > k) is equiavalent to
+		x mod 2^k
+		so we have 
+		
+		LHS = x mod 2^7
+		and meaning we trancating x into the 7 least bits.
+	
+	RHS: 127 = 1111111
+
+		When we operate & with 1111111, it means that we only extracting the 7 least bits from x,
+		and we don't care the rest.
+		It is same meaning as trancating x into the 7 least bits.
+		so
+		RHS = x mod 2^7.
+
+	Therefore, they are always true.
+

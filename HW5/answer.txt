@@ -1,0 +1,100 @@
+
+Name: Masataka Mori
+
+
+=======================================================================
+Problem12.17:
+	A: The program in Figure 12.46 has a bug. 
+	   The thread is supposed to sleep for 1 second and then 
+	   print a string. However, when we run it on our system, 
+	   nothing prints. Why?
+
+	B: You can fix this bug by replacing the exit function in line 10
+	   with one of two differenct Pthreads function calls. Which ones?
+
+
+
+		A.
+			Recall that exit(0) function immediately terminates all threads 
+			currrently running in the process.
+			While the peer threads are waiting 1 seconds to call print 
+			function, the main thread already calls the exit function, 
+			and it terminates the all threads before call print function.
+			Therfore, we don't see any prints when we run.
+
+
+		B.
+			Pthreads_join(tid, NULL);
+			We need to is prevent the main threads to terminate before
+			or during the peer threads are running, so 
+			we use Pthread_join, which can make main threads to terminate
+			only after other threads terminate.
+			Therefore, by putting that, we can make sure the machine executes
+			all instructions in the *thread function including the printf
+			function.
+
+
+
+
+
+
+
+
+
+
+
+
+====================================================================
+Problem12.25
+	In the prethreaded concurrent echo server in Figure 12.28, each
+	thread calls the echo_cnt function (Figure 12.29). Is echo_cnt
+	thread-safe? Is it reentrant? Why or why not?
+
+
+		Some unknow function:
+			ssize_t rio_readn(int fd, void *usrbuf, size_t n);
+				: transfers n bytes from location usrbuf to descriptor fd.
+				  never returns short count
+				  can be interleaved arbitrary on the same descriptor
+
+			void rio_readinitb(rio_t *rp, int fd);
+				: called once per open descriptor
+				  It associates the descriptor fd with a read buffer of type rio_t at
+				  address rp.
+
+
+			ssize_t rio_readlineb(rio_t *rp, void *usrbuf, size_t n);
+				: read the next line from file rp(including the terminating new line
+				  character), copies it to memory location usrbuf, and terminates the text line
+				  with the NULL (zero) character.
+				  It reads at most maxlen - 1 bytes, leaving room for the terminating NULL char.
+
+		4 cases of thread unsafe
+			1) Functions that do not protect shared variables. 
+			2) Functions that keep state accross multiple invocations
+			3) Functions that returns a pointer to a static variable
+			4) Functions that call thread-unsafe functions
+
+
+		First of all, since it does share the variable, byte_cnt, with other threads,
+		it is not reentrant.
+		Also, echo_cnt is thread-safe function since it doesn't fit into any case
+		of thread unsafe written in above.
+		The shared value byte_cnt is protected by using semaphore around it.
+		It doensn't keep state accross multiple invocations.
+		It doen't return a pointer to a stati variable.
+		It doesn't call thread-unsafe functions. By looking at the descriptions of function
+		which is called inside of echo_cnt function, they don't use any shared variable, so
+		it is thread-safe functions.
+		Therefore, echo_cnt is thread-safe function and not reentrant.
+
+
+
+
+
+
+
+
+
+
+
